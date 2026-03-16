@@ -1,0 +1,14 @@
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc
+*.pyo
+*.db
+.env
+*.egg-info/
+media/
+credentials/apple/*
+!credentials/apple/.gitkeep
+credentials/google/*
+!credentials/google/.gitkeep
+!credentials/README.md
