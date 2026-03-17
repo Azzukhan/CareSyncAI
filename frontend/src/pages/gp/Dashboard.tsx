@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,11 +9,22 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
-  Heart, LogOut, User, Users, Stethoscope, Clock,
+  User, Users, Stethoscope, Clock,
   FileText, Pill, FlaskConical, Send, Plus, CheckCircle,
   ChevronRight, AlertCircle
 } from "lucide-react";
 import QRScannerModal from "@/components/QRScannerModal";
+import StaffPortalShell, {
+  staffCardClassName,
+  staffInputClassName,
+  staffMutedCardClassName,
+  staffPrimaryButtonClassName,
+  staffSecondaryButtonClassName,
+  staffTabListClassName,
+  staffTabTriggerClassName,
+  staffTextareaClassName,
+} from "@/components/workspace/StaffPortalShell";
+import { workspaceIconSurfaceClassName } from "@/components/workspace/workspaceTheme";
 import { useToast } from "@/hooks/use-toast";
 import {
   createGpLabOrder,
@@ -151,34 +161,17 @@ export default function GPDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-lg">
-        <div className="container flex h-14 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center">
-              <Heart className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-sm">CareSync</span>
-            <Badge variant="secondary" className="ml-2">GP Portal</Badge>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground hidden sm:block">{user?.full_name}</span>
-            <Button variant="ghost" size="icon" onClick={logout}>
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="container py-6 space-y-6">
+    <StaffPortalShell portalLabel="GP Portal" userName={user?.full_name} onLogout={logout}>
+      <div className="space-y-6">
         {!selectedPatient ? (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-4 rounded-[30px] border border-white/10 bg-slate-950/45 p-6 shadow-[0_24px_70px_rgba(2,6,23,0.26)] md:flex-row md:items-end md:justify-between">
               <div>
-                <h1 className="text-2xl font-bold">
+                <p className="text-xs uppercase tracking-[0.24em] text-amber-300/80">GP Workspace</p>
+                <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-100">
                   Good Morning, {user?.full_name?.split(" ")[0] ?? "Doctor"}
                 </h1>
-                <p className="text-muted-foreground text-sm">
+                <p className="mt-2 text-sm text-slate-400">
                   {new Date().toLocaleDateString("en-GB", {
                     weekday: "long",
                     day: "numeric",
@@ -187,7 +180,15 @@ export default function GPDashboard() {
                   })}
                 </p>
               </div>
-              <QRScannerModal onPatientFound={setSelectedPatient} />
+              <QRScannerModal
+                onPatientFound={setSelectedPatient}
+                trigger={
+                  <Button size="lg" className={staffPrimaryButtonClassName}>
+                    <Stethoscope className="mr-2 h-5 w-5" />
+                    Find Patient
+                  </Button>
+                }
+              />
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -196,50 +197,48 @@ export default function GPDashboard() {
                   label: "Today's Patients",
                   value: summaryQuery.data?.todays_patient_count ?? 0,
                   icon: Users,
-                  color: "text-primary",
                 },
                 {
                   label: "Today's Visits",
                   value: summaryQuery.data?.todays_visits ?? 0,
                   icon: CheckCircle,
-                  color: "text-accent",
                 },
                 {
                   label: "Recent Patients",
                   value: summaryQuery.data?.recent_patients.length ?? 0,
                   icon: Clock,
-                  color: "text-secondary",
                 },
                 {
                   label: "Last Refresh",
                   value: summaryQuery.data ? formatDate(summaryQuery.data.generated_at) : "N/A",
                   icon: AlertCircle,
-                  color: "text-destructive",
                 },
               ].map((summary) => (
-                <Card key={summary.label}>
-                  <CardContent className="pt-4 pb-4 flex items-center gap-3">
-                    <summary.icon className={`h-8 w-8 ${summary.color}`} />
+                <Card key={summary.label} className={staffCardClassName}>
+                  <CardContent className="flex items-center gap-3 pt-4 pb-4">
+                    <div className={`flex h-12 w-12 items-center justify-center ${workspaceIconSurfaceClassName}`}>
+                      <summary.icon className="h-5 w-5" />
+                    </div>
                     <div>
-                      <p className="text-2xl font-bold">{summary.value}</p>
-                      <p className="text-xs text-muted-foreground">{summary.label}</p>
+                      <p className="text-2xl font-bold text-slate-100">{summary.value}</p>
+                      <p className="text-xs text-slate-400">{summary.label}</p>
                     </div>
                   </CardContent>
                 </Card>
               ))}
             </div>
 
-            <Card>
+            <Card className={staffCardClassName}>
               <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Users className="h-5 w-5 text-primary" /> Recent Patient Activity
+                <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
+                  <Users className="h-5 w-5 text-amber-300" /> Recent Patient Activity
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {summaryQuery.isLoading ? (
                   <div className="space-y-3">
                     {Array.from({ length: 3 }).map((_, index) => (
-                      <div key={index} className="h-16 rounded-lg bg-muted animate-pulse" />
+                      <div key={index} className="h-16 rounded-2xl bg-white/[0.04] animate-pulse" />
                     ))}
                   </div>
                 ) : summaryQuery.data?.recent_patients.length ? (
@@ -248,25 +247,25 @@ export default function GPDashboard() {
                       <button
                         key={patient.nhs_healthcare_id}
                         onClick={() => setSelectedPatient(patient.nhs_healthcare_id)}
-                        className="w-full flex items-center justify-between p-3 rounded-lg border hover:bg-muted/50 transition-colors text-left"
+                        className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-3 text-left transition-colors hover:bg-white/[0.06]"
                       >
                         <div className="flex items-center gap-3">
-                          <div className="h-10 w-10 rounded-full bg-muted flex items-center justify-center">
-                            <User className="h-5 w-5 text-muted-foreground" />
+                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+                            <User className="h-5 w-5" />
                           </div>
                           <div>
-                            <p className="font-medium text-sm">{patient.full_name}</p>
-                            <p className="text-xs text-muted-foreground">
+                            <p className="text-sm font-medium text-slate-100">{patient.full_name}</p>
+                            <p className="text-xs text-slate-400">
                               {patient.nhs_healthcare_id} • Last visit {formatDateTime(patient.last_visit_at)}
                             </p>
                           </div>
                         </div>
-                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                        <ChevronRight className="h-4 w-4 text-slate-500" />
                       </button>
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
+                  <p className="text-sm text-slate-400">
                     No GP visits have been logged for this account yet. Use the QR lookup to open a patient record.
                   </p>
                 )}
@@ -277,7 +276,8 @@ export default function GPDashboard() {
           <>
             <div className="flex items-center gap-4">
               <Button
-                variant="ghost"
+                variant="outline"
+                className={staffSecondaryButtonClassName}
                 onClick={() => {
                   setSelectedPatient(null);
                   setReferralType(null);
@@ -292,31 +292,31 @@ export default function GPDashboard() {
             </div>
 
             {patientQuery.isLoading ? (
-              <Card>
+              <Card className={staffCardClassName}>
                 <CardContent className="pt-6">
-                  <div className="h-24 rounded bg-muted animate-pulse" />
+                  <div className="h-24 rounded-2xl bg-white/[0.04] animate-pulse" />
                 </CardContent>
               </Card>
             ) : patientQuery.isError || !patientQuery.data ? (
-              <Card>
+              <Card className={staffCardClassName}>
                 <CardContent className="pt-6 space-y-4">
-                  <p className="font-semibold">Unable to load patient record.</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="font-semibold text-slate-100">Unable to load patient record.</p>
+                  <p className="text-sm text-slate-400">
                     {patientQuery.error instanceof Error ? patientQuery.error.message : "Try another patient."}
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <>
-                <Card>
+                <Card className={staffCardClassName}>
                   <CardContent className="pt-6">
                     <div className="flex items-start gap-4">
-                      <div className="h-14 w-14 rounded-2xl gradient-primary flex items-center justify-center shrink-0">
-                        <User className="h-7 w-7 text-primary-foreground" />
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+                        <User className="h-7 w-7" />
                       </div>
                       <div className="flex-1">
-                        <h2 className="text-xl font-bold">{patientQuery.data.patient.full_name}</h2>
-                        <p className="text-sm text-muted-foreground">
+                        <h2 className="text-xl font-bold text-slate-100">{patientQuery.data.patient.full_name}</h2>
+                        <p className="text-sm text-slate-400">
                           {patientQuery.data.patient.nhs_healthcare_id}
                           {patientQuery.data.patient.date_of_birth
                             ? ` • DOB: ${patientQuery.data.patient.date_of_birth}`
@@ -324,17 +324,17 @@ export default function GPDashboard() {
                         </p>
                         <div className="flex flex-wrap gap-2 mt-2">
                           {patientQuery.data.patient.blood_group && (
-                            <Badge variant="secondary">
+                            <Badge className="border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10">
                               Blood: {patientQuery.data.patient.blood_group}
                             </Badge>
                           )}
                           {patientQuery.data.patient.allergies.map((allergy) => (
-                            <Badge key={allergy} variant="destructive" className="gap-1">
+                            <Badge key={allergy} className="gap-1 bg-rose-500/10 text-rose-200 hover:bg-rose-500/10">
                               <AlertCircle className="h-3 w-3" /> {allergy}
                             </Badge>
                           ))}
                           {patientQuery.data.patient.chronic_conditions.map((condition) => (
-                            <Badge key={condition} variant="outline">{condition}</Badge>
+                            <Badge key={condition} variant="outline" className="border-white/10 text-slate-300">{condition}</Badge>
                           ))}
                         </div>
                       </div>
@@ -343,42 +343,42 @@ export default function GPDashboard() {
                 </Card>
 
                 <Tabs defaultValue="history">
-                  <TabsList>
-                    <TabsTrigger value="history" className="gap-1">
+                  <TabsList className={staffTabListClassName}>
+                    <TabsTrigger value="history" className={staffTabTriggerClassName}>
                       <FileText className="h-3 w-3" /> History
                     </TabsTrigger>
-                    <TabsTrigger value="notes" className="gap-1">
+                    <TabsTrigger value="notes" className={staffTabTriggerClassName}>
                       <Stethoscope className="h-3 w-3" /> Visit Notes
                     </TabsTrigger>
-                    <TabsTrigger value="refer" className="gap-1">
+                    <TabsTrigger value="refer" className={staffTabTriggerClassName}>
                       <Send className="h-3 w-3" /> Refer
                     </TabsTrigger>
-                    <TabsTrigger value="prescribe" className="gap-1">
+                    <TabsTrigger value="prescribe" className={staffTabTriggerClassName}>
                       <Pill className="h-3 w-3" /> Prescribe
                     </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="history" className="space-y-3 mt-4">
                     {patientQuery.data.visits.length === 0 ? (
-                      <Card>
-                        <CardContent className="pt-6 text-sm text-muted-foreground">
+                      <Card className={staffCardClassName}>
+                        <CardContent className="pt-6 text-sm text-slate-400">
                           No visible history is available for this patient.
                         </CardContent>
                       </Card>
                     ) : (
                       patientQuery.data.visits.map((visit) => (
-                        <Card key={visit.id}>
+                        <Card key={visit.id} className={staffCardClassName}>
                           <CardContent className="pt-4 pb-4">
                             <div className="flex items-center gap-2 mb-2">
-                              <Badge variant={visit.record_type === "gp_visit" ? "default" : "secondary"}>
+                              <Badge className={visit.record_type === "gp_visit" ? "border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10" : "border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10"}>
                                 {visitLabel(visit.record_type, visit.provider_role)}
                               </Badge>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-xs text-slate-500">
                                 {formatDate(visit.created_at)}
                               </span>
                             </div>
-                            <p className="font-medium text-sm">{visit.provider_name}</p>
-                            <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                            <p className="text-sm font-medium text-slate-100">{visit.provider_name}</p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-300">
                               {visit.notes}
                             </p>
                           </CardContent>
@@ -388,19 +388,19 @@ export default function GPDashboard() {
                   </TabsContent>
 
                   <TabsContent value="notes" className="mt-4">
-                    <Card>
+                    <Card className={staffCardClassName}>
                       <CardContent className="pt-6 space-y-4">
                         <div className="space-y-2">
-                          <Label>Visit Notes</Label>
+                          <Label className="text-slate-200">Visit Notes</Label>
                           <Textarea
                             placeholder="Document symptoms, examination findings, and clinical assessment..."
-                            className="min-h-[200px]"
+                            className={`${staffTextareaClassName} min-h-[200px]`}
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
                           />
                         </div>
                         <Button
-                          className="gradient-primary border-0 gap-2"
+                          className={staffPrimaryButtonClassName}
                           onClick={() => saveVisitMutation.mutate()}
                           disabled={!notes.trim() || saveVisitMutation.isPending}
                         >
@@ -429,29 +429,29 @@ export default function GPDashboard() {
                       ].map((option) => (
                         <Card
                           key={option.type}
-                          className={`cursor-pointer transition-all hover:shadow-lg ${
-                            referralType === option.type ? "ring-2 ring-primary" : ""
+                          className={`cursor-pointer border-white/10 bg-slate-950/45 text-slate-100 transition-all hover:border-white/20 hover:bg-white/[0.04] ${
+                            referralType === option.type ? "ring-2 ring-amber-300/40" : ""
                           }`}
                           onClick={() => setReferralType(option.type)}
                         >
                           <CardContent className="pt-6 text-center">
-                            <div className="h-12 w-12 rounded-xl gradient-primary flex items-center justify-center mx-auto mb-3">
-                              <option.icon className="h-6 w-6 text-primary-foreground" />
+                            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+                              <option.icon className="h-6 w-6" />
                             </div>
-                            <h3 className="font-semibold text-sm">{option.label}</h3>
-                            <p className="text-xs text-muted-foreground mt-1">{option.desc}</p>
+                            <h3 className="text-sm font-semibold text-slate-100">{option.label}</h3>
+                            <p className="mt-1 text-xs text-slate-400">{option.desc}</p>
                           </CardContent>
                         </Card>
                       ))}
                     </div>
                     {referralType && (
-                      <Card>
+                      <Card className={staffCardClassName}>
                         <CardContent className="pt-6 space-y-4">
-                          <h3 className="font-semibold">
+                          <h3 className="font-semibold text-slate-100">
                             {referralType === "specialist" ? "Specialist Referral Notes" : "Lab Test Description"}
                           </h3>
                           <div className="space-y-2">
-                            <Label>Details</Label>
+                            <Label className="text-slate-200">Details</Label>
                             <Textarea
                               placeholder={
                                 referralType === "specialist"
@@ -460,11 +460,11 @@ export default function GPDashboard() {
                               }
                               value={referralNotes}
                               onChange={(e) => setReferralNotes(e.target.value)}
-                              className="min-h-[120px]"
+                              className={staffTextareaClassName}
                             />
                           </div>
                           <Button
-                            className="gradient-primary border-0 gap-2"
+                            className={staffPrimaryButtonClassName}
                             onClick={() => referralMutation.mutate()}
                             disabled={!referralNotes.trim() || referralMutation.isPending}
                           >
@@ -477,56 +477,58 @@ export default function GPDashboard() {
                   </TabsContent>
 
                   <TabsContent value="prescribe" className="mt-4">
-                    <Card>
+                    <Card className={staffCardClassName}>
                       <CardHeader>
-                        <CardTitle className="text-lg">Current Medications</CardTitle>
+                        <CardTitle className="text-lg text-slate-100">Current Medications</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         {patientQuery.data.medications.map((medication) => (
                           <div
                             key={medication.id}
-                            className="flex items-center justify-between p-3 rounded-lg border"
+                            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-3"
                           >
                             <div>
-                              <p className="font-medium text-sm">
+                              <p className="text-sm font-medium text-slate-100">
                                 {medication.medicine_name}
                               </p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-xs text-slate-400">
                                 {medication.dosage_instruction}
                               </p>
                             </div>
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="border-white/10 text-xs text-slate-300">
                               {formatRoleLabel(medication.status)}
                             </Badge>
                           </div>
                         ))}
                         {!patientQuery.data.medications.length && (
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-slate-400">
                             No medications recorded for this patient yet.
                           </p>
                         )}
                         <Separator />
-                        <h4 className="font-semibold text-sm pt-2">Add New Medication</h4>
+                        <h4 className="pt-2 text-sm font-semibold text-slate-100">Add New Medication</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label>Medication Name</Label>
+                            <Label className="text-slate-200">Medication Name</Label>
                             <Input
                               placeholder="e.g. Amoxicillin"
+                              className={staffInputClassName}
                               value={newMedName}
                               onChange={(e) => setNewMedName(e.target.value)}
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label>Dose & Frequency</Label>
+                            <Label className="text-slate-200">Dose & Frequency</Label>
                             <Input
                               placeholder="e.g. 500mg, 3x daily"
+                              className={staffInputClassName}
                               value={newMedDose}
                               onChange={(e) => setNewMedDose(e.target.value)}
                             />
                           </div>
                         </div>
                         <Button
-                          className="gradient-primary border-0 gap-2"
+                          className={staffPrimaryButtonClassName}
                           onClick={() => medicationMutation.mutate()}
                           disabled={!newMedName.trim() || !newMedDose.trim() || medicationMutation.isPending}
                         >
@@ -544,6 +546,6 @@ export default function GPDashboard() {
           </>
         )}
       </div>
-    </div>
+    </StaffPortalShell>
   );
 }

@@ -18,6 +18,13 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import {
+  workspaceAccentSoftBadgeClassName,
+  workspaceCardClassName,
+  workspaceIconAccentClassName,
+  workspaceOutlineBadgeClassName,
+  workspaceSoftPanelClassName,
+} from "@/components/workspace/workspaceTheme";
 import { useToast } from "@/hooks/use-toast";
 import {
   bulkUpdateHistoryAccess,
@@ -95,20 +102,20 @@ const historyPresentation = {
   visit: {
     label: "Visit",
     icon: ShieldCheck,
-    iconClassName: "text-cyan-300",
-    badgeClassName: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
+    iconClassName: workspaceIconAccentClassName,
+    badgeClassName: workspaceAccentSoftBadgeClassName,
   },
   lab: {
     label: "Lab",
     icon: FlaskConical,
-    iconClassName: "text-violet-300",
-    badgeClassName: "border-violet-400/20 bg-violet-400/10 text-violet-100",
+    iconClassName: workspaceIconAccentClassName,
+    badgeClassName: workspaceAccentSoftBadgeClassName,
   },
   medication: {
     label: "Medicine",
     icon: Pill,
-    iconClassName: "text-emerald-300",
-    badgeClassName: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
+    iconClassName: workspaceIconAccentClassName,
+    badgeClassName: workspaceAccentSoftBadgeClassName,
   },
 } as const;
 
@@ -327,7 +334,7 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
         <div className="grid gap-3 p-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="space-y-3">
           {filter === "all" && !dashboardQuery.isLoading && !dashboardQuery.isError ? (
-            <Card className="border-white/10 bg-slate-950/40">
+            <Card className={workspaceCardClassName}>
               <CardHeader>
                 <CardTitle className="text-base">History Access Controls</CardTitle>
                 <p className="text-sm text-slate-400">
@@ -336,14 +343,14 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
                 </p>
               </CardHeader>
               <CardContent className="grid gap-3 md:grid-cols-2">
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className={workspaceSoftPanelClassName + " p-4"}>
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium text-slate-100">Select all for GP</p>
                       <p className="mt-1 text-xs text-slate-400">
                         Share every history record with GP access.
                       </p>
-                      <p className="mt-3 text-xs text-cyan-200">
+                      <p className="mt-3 text-xs text-amber-200">
                         {gpSharedCount}/{shareableCount} records shared
                       </p>
                     </div>
@@ -357,14 +364,14 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
                   </div>
                 </div>
 
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+                <div className={workspaceSoftPanelClassName + " p-4"}>
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium text-slate-100">Select all for Specialist</p>
                       <p className="mt-1 text-xs text-slate-400">
                         Share every history record with specialist access.
                       </p>
-                      <p className="mt-3 text-xs text-cyan-200">
+                      <p className="mt-3 text-xs text-amber-200">
                         {specialistSharedCount}/{shareableCount} records shared
                       </p>
                     </div>
@@ -381,18 +388,18 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
             </Card>
           ) : null}
 
-          <Card className="border-white/10 bg-slate-950/40">
+          <Card className={workspaceCardClassName}>
             <CardHeader className="flex flex-row items-end justify-between gap-4">
               <div>
                 <CardTitle className="text-base">Records</CardTitle>
               </div>
-              <Badge variant="outline" className="border-white/10 text-slate-300">
+              <Badge variant="outline" className={workspaceOutlineBadgeClassName}>
                 {visibleCount} record{visibleCount === 1 ? "" : "s"}
               </Badge>
             </CardHeader>
             <CardContent className="space-y-3">
               {dashboardQuery.isLoading ? (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5 text-sm text-slate-400">
+                <div className={workspaceSoftPanelClassName + " p-5 text-sm text-slate-400"}>
                   Loading patient records...
                 </div>
               ) : dashboardQuery.isError ? (
@@ -423,17 +430,17 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
                                 {presentation.label}
                               </Badge>
                               {entry.sharedWithGp ? (
-                                <Badge className="bg-cyan-400/10 text-cyan-100 hover:bg-cyan-400/10">
-                                  GP access
-                                </Badge>
+                              <Badge className={workspaceAccentSoftBadgeClassName}>
+                                GP access
+                              </Badge>
                               ) : null}
                               {entry.sharedWithSpecialist ? (
-                                <Badge className="bg-violet-400/10 text-violet-100 hover:bg-violet-400/10">
+                                <Badge className={workspaceAccentSoftBadgeClassName}>
                                   Specialist access
                                 </Badge>
                               ) : null}
                               {entry.statusLabel ? (
-                                <Badge variant="outline" className="border-white/10 text-slate-300">
+                                <Badge variant="outline" className={workspaceOutlineBadgeClassName}>
                                   {entry.statusLabel}
                                 </Badge>
                               ) : null}
@@ -447,7 +454,7 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
                             <p className="text-sm text-slate-400">{entry.meta}</p>
                             <p className="text-sm text-slate-300">{entry.summary}</p>
                             {entry.fileUrl ? (
-                              <Button asChild size="sm" variant="outline" className="border-white/10 bg-white/5">
+                              <Button asChild size="sm" variant="outline" className={workspaceSoftPanelClassName}>
                                 <a
                                   href={resolveApiUrl(entry.fileUrl)}
                                   target="_blank"
@@ -472,7 +479,7 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
                                     {entry.isHidden ? (
                                       <EyeOff className="h-4 w-4 text-amber-300" />
                                     ) : (
-                                      <Eye className="h-4 w-4 text-emerald-300" />
+                                      <Eye className={`h-4 w-4 ${workspaceIconAccentClassName}`} />
                                     )}
                                     <p className="text-sm font-medium text-slate-100">Show record</p>
                                   </div>
@@ -499,7 +506,7 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <Shield className="h-4 w-4 text-cyan-300" />
+                                  <Shield className={`h-4 w-4 ${workspaceIconAccentClassName}`} />
                                   <p className="text-sm font-medium text-slate-100">GP access</p>
                                 </div>
                                 <p className="mt-1 text-xs text-slate-400">
@@ -524,7 +531,7 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
                             <div className="flex items-start justify-between gap-3">
                               <div>
                                 <div className="flex items-center gap-2">
-                                  <CheckCircle2 className="h-4 w-4 text-violet-300" />
+                                  <CheckCircle2 className={`h-4 w-4 ${workspaceIconAccentClassName}`} />
                                   <p className="text-sm font-medium text-slate-100">
                                     Specialist access
                                   </p>
@@ -557,12 +564,12 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
           </div>
 
           <div className="space-y-3">
-            <Card className="border-white/10 bg-slate-950/40">
+            <Card className={workspaceCardClassName}>
             <CardHeader>
               <CardTitle className="text-base">Patient Snapshot</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className={workspaceSoftPanelClassName + " p-4"}>
                 <p className="font-medium text-slate-100">
                   {patient?.full_name ?? user?.full_name ?? "Patient"}
                 </p>
@@ -587,9 +594,9 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
                   {snapshotStats.map(([label, value, Icon]) => (
                     <div
                       key={label as string}
-                      className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
+                      className={workspaceSoftPanelClassName + " p-3"}
                     >
-                      <Icon className="h-4 w-4 text-cyan-300" />
+                      <Icon className={`h-4 w-4 ${workspaceIconAccentClassName}`} />
                       <p className="mt-3 text-xs text-slate-400">{label as string}</p>
                       <p className="mt-1 text-lg font-semibold text-slate-100">{value as number}</p>
                     </div>
@@ -600,7 +607,7 @@ export function PatientHistoryPage({ filter }: { filter: PatientHistoryFilter })
             </Card>
 
             {filter === "all" && !dashboardQuery.isError ? (
-              <Card className="border-white/10 bg-slate-950/40">
+              <Card className={workspaceCardClassName}>
               <CardHeader>
                 <CardTitle className="text-base">Access Notes</CardTitle>
               </CardHeader>

@@ -17,6 +17,14 @@ import PatientShell from "@/components/patient/PatientShell";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  workspaceAccentSoftBadgeClassName,
+  workspaceCardClassName,
+  workspaceEyebrowClassName,
+  workspaceIconAccentClassName,
+  workspaceOutlineBadgeClassName,
+  workspaceSoftPanelClassName,
+} from "@/components/workspace/workspaceTheme";
 import { getPatientDashboard } from "@/lib/api";
 import { useRequiredAuth } from "@/lib/auth";
 import { formatDate, formatDateTime, formatRoleLabel } from "@/lib/utils";
@@ -83,20 +91,20 @@ export default function PatientDashboard() {
     visit: {
       label: "Visit",
       icon: ShieldCheck,
-      iconClassName: "text-cyan-300",
-      badgeClassName: "border-cyan-400/20 bg-cyan-400/10 text-cyan-100",
+      iconClassName: workspaceIconAccentClassName,
+      badgeClassName: workspaceAccentSoftBadgeClassName,
     },
     lab: {
       label: "Lab",
       icon: FlaskConical,
-      iconClassName: "text-violet-300",
-      badgeClassName: "border-violet-400/20 bg-violet-400/10 text-violet-100",
+      iconClassName: workspaceIconAccentClassName,
+      badgeClassName: workspaceAccentSoftBadgeClassName,
     },
     medication: {
       label: "Medication",
       icon: Pill,
-      iconClassName: "text-emerald-300",
-      badgeClassName: "border-emerald-400/20 bg-emerald-400/10 text-emerald-100",
+      iconClassName: workspaceIconAccentClassName,
+      badgeClassName: workspaceAccentSoftBadgeClassName,
     },
   } as const;
 
@@ -111,9 +119,9 @@ export default function PatientDashboard() {
       <ScrollArea className="h-full">
         <div className="space-y-4 p-4">
           <div className="grid gap-3 xl:grid-cols-[1.05fr_0.95fr]">
-            <Card className="border-white/10 bg-slate-950/40">
+            <Card className={workspaceCardClassName}>
             <CardHeader className="pb-4">
-              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/80">Patient Details</p>
+              <p className={workspaceEyebrowClassName}>Patient Details</p>
               <CardTitle className="mt-2 text-3xl">{patient?.full_name ?? user?.full_name ?? "Patient"}</CardTitle>
               <p className="text-sm text-slate-400">
                 NHS number {patient?.nhs_healthcare_id ?? user?.nhs_healthcare_id ?? "Not available"}
@@ -129,18 +137,18 @@ export default function PatientDashboard() {
                 ].map(([label, value, Icon]) => (
                   <div
                     key={label as string}
-                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                    className={workspaceSoftPanelClassName + " p-4"}
                   >
-                    <Icon className="h-4 w-4 text-cyan-300" />
+                    <Icon className={`h-4 w-4 ${workspaceIconAccentClassName}`} />
                     <p className="mt-3 text-xs uppercase tracking-[0.18em] text-slate-500">{label as string}</p>
                     <p className="mt-1 text-sm font-medium text-slate-100">{value as string}</p>
                   </div>
                 ))}
               </div>
 
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+              <div className={workspaceSoftPanelClassName + " p-4"}>
                 <div className="flex items-start gap-3">
-                  <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-300">
+                  <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-300">
                     <MapPin className="h-4 w-4" />
                   </div>
                   <div>
@@ -159,7 +167,7 @@ export default function PatientDashboard() {
                   </Badge>
                 ))}
                 {patient?.chronic_conditions.map((item) => (
-                  <Badge key={item} variant="outline" className="border-white/10 text-slate-300">
+                  <Badge key={item} variant="outline" className={workspaceOutlineBadgeClassName}>
                     {item}
                   </Badge>
                 ))}
@@ -171,21 +179,21 @@ export default function PatientDashboard() {
               </div>
 
               {dashboardQuery.isLoading ? (
-                <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+                <div className={workspaceSoftPanelClassName + " p-4 text-sm text-slate-400"}>
                   Loading patient details...
                 </div>
               ) : null}
             </CardContent>
             </Card>
 
-            <Card className="border-white/10 bg-slate-950/40">
+            <Card className={workspaceCardClassName}>
             <CardHeader className="pb-4">
               <div className="flex items-center gap-3">
-                <div className="rounded-2xl bg-cyan-400/10 p-3 text-cyan-300">
+                <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-300">
                   <QrCode className="h-5 w-5" />
                 </div>
                 <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/80">Digital Health Card</p>
+                  <p className={workspaceEyebrowClassName}>Digital Health Card</p>
                   <CardTitle className="mt-2 text-2xl">Scan, download, or share</CardTitle>
                 </div>
               </div>
@@ -204,22 +212,22 @@ export default function PatientDashboard() {
             </Card>
           </div>
 
-          <Card className="border-white/10 bg-slate-950/40">
+          <Card className={workspaceCardClassName}>
           <CardHeader className="flex flex-row items-end justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/80">Health History</p>
+              <p className={workspaceEyebrowClassName}>Health History</p>
               <CardTitle className="mt-2 text-2xl">Latest Five Updates</CardTitle>
               <p className="mt-2 text-sm text-slate-400">
                 Recent visits, lab reports, and medication changes in one list.
               </p>
             </div>
-            <Badge variant="outline" className="border-white/10 text-slate-300">
+            <Badge variant="outline" className={workspaceOutlineBadgeClassName}>
               {latestHistory.length} items
             </Badge>
           </CardHeader>
           <CardContent className="space-y-3">
             {dashboardQuery.isLoading ? (
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm text-slate-400">
+              <div className={workspaceSoftPanelClassName + " p-4 text-sm text-slate-400"}>
                 Loading your latest health history...
               </div>
             ) : dashboardQuery.isError ? (

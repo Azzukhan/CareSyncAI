@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,9 +7,22 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
-  Heart, LogOut, User, FlaskConical, Upload, CheckCircle, AlertCircle, FileText
+  User, FlaskConical, Upload, CheckCircle, AlertCircle, FileText
 } from "lucide-react";
 import QRScannerModal from "@/components/QRScannerModal";
+import StaffPortalShell, {
+  staffCardClassName,
+  staffInputClassName,
+  staffPrimaryButtonClassName,
+  staffSecondaryButtonClassName,
+  staffTextareaClassName,
+} from "@/components/workspace/StaffPortalShell";
+import {
+  workspaceAccentSoftBadgeClassName,
+  workspaceEyebrowClassName,
+  workspaceIconSurfaceClassName,
+  workspaceOutlineBadgeClassName,
+} from "@/components/workspace/workspaceTheme";
 import { useToast } from "@/hooks/use-toast";
 import { getPatientDashboard, listLabOrders, resolveApiUrl, uploadLabReport } from "@/lib/api";
 import { useRequiredAuth } from "@/lib/auth";
@@ -79,41 +91,24 @@ export default function LabDashboard() {
   const completedTests = patientQuery.data?.lab_reports ?? [];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-lg">
-        <div className="container flex h-14 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center">
-              <Heart className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-sm">CareSync</span>
-            <Badge variant="secondary" className="ml-2">Lab Portal</Badge>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground hidden sm:block">{user?.full_name}</span>
-            <Button variant="ghost" size="icon" onClick={logout}>
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="container py-6 space-y-6">
+    <StaffPortalShell portalLabel="Lab Portal" userName={user?.full_name} onLogout={logout}>
+      <div className="space-y-6">
         {!selectedPatient ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
-            <div className="h-24 w-24 rounded-3xl gradient-accent flex items-center justify-center">
-              <FlaskConical className="h-12 w-12 text-accent-foreground" />
+          <div className={`${staffCardClassName} flex min-h-[60vh] flex-col items-center justify-center space-y-6 rounded-[30px] p-8 text-center`}>
+            <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-amber-400/20 bg-amber-400/10 text-amber-300">
+              <FlaskConical className="h-12 w-12" />
             </div>
             <div className="text-center">
-              <h1 className="text-2xl font-bold mb-2">Lab Portal</h1>
-              <p className="text-muted-foreground max-w-md">
+              <p className={workspaceEyebrowClassName}>Lab Workspace</p>
+              <h1 className="mb-2 mt-2 text-3xl font-bold tracking-tight text-slate-100">Lab Portal</h1>
+              <p className="max-w-md text-slate-400">
                 Search by NHS ID or QR payload to review open lab orders and attach completed results.
               </p>
             </div>
             <QRScannerModal
               onPatientFound={setSelectedPatient}
               trigger={
-                <Button size="lg" className="gradient-accent border-0 gap-2 text-accent-foreground">
+                <Button size="lg" className={staffPrimaryButtonClassName}>
                   <FlaskConical className="h-5 w-5" /> Find Patient
                 </Button>
               }
@@ -121,40 +116,40 @@ export default function LabDashboard() {
           </div>
         ) : (
           <>
-            <Button variant="ghost" onClick={() => setSelectedPatient(null)}>← Back</Button>
+            <Button variant="outline" className={staffSecondaryButtonClassName} onClick={() => setSelectedPatient(null)}>← Back</Button>
 
             {patientQuery.isLoading ? (
-              <Card>
+              <Card className={staffCardClassName}>
                 <CardContent className="pt-6">
-                  <div className="h-24 rounded bg-muted animate-pulse" />
+                  <div className="h-24 rounded-2xl bg-white/[0.04] animate-pulse" />
                 </CardContent>
               </Card>
             ) : patientQuery.isError || !patient ? (
-              <Card>
+              <Card className={staffCardClassName}>
                 <CardContent className="pt-6 space-y-4">
-                  <p className="font-semibold">Unable to load patient record.</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="font-semibold text-slate-100">Unable to load patient record.</p>
+                  <p className="text-sm text-slate-400">
                     {patientQuery.error instanceof Error ? patientQuery.error.message : "Try another patient."}
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <>
-                <Card>
+                <Card className={staffCardClassName}>
                   <CardContent className="pt-6">
                     <div className="flex items-start gap-4">
-                      <div className="h-14 w-14 rounded-2xl gradient-primary flex items-center justify-center shrink-0">
-                        <User className="h-7 w-7 text-primary-foreground" />
+                      <div className={`flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl ${workspaceIconSurfaceClassName}`}>
+                        <User className="h-7 w-7" />
                       </div>
                       <div>
-                        <h2 className="text-xl font-bold">{patient.full_name}</h2>
-                        <p className="text-sm text-muted-foreground">
+                        <h2 className="text-xl font-bold text-slate-100">{patient.full_name}</h2>
+                        <p className="text-sm text-slate-400">
                           {patient.nhs_healthcare_id}
                           {patient.date_of_birth ? ` • DOB: ${patient.date_of_birth}` : ""}
                         </p>
                         <div className="flex flex-wrap gap-2 mt-2">
                           {patient.allergies.map((allergy) => (
-                            <Badge key={allergy} variant="destructive" className="gap-1">
+                            <Badge key={allergy} className="gap-1 bg-rose-500/10 text-rose-200 hover:bg-rose-500/10">
                               <AlertCircle className="h-3 w-3" />{allergy}
                             </Badge>
                           ))}
@@ -165,10 +160,10 @@ export default function LabDashboard() {
                 </Card>
 
                 {pendingTests.length > 0 && (
-                  <Card>
+                  <Card className={staffCardClassName}>
                     <CardHeader>
-                      <CardTitle className="text-lg flex items-center gap-2 text-secondary">
-                        <FlaskConical className="h-5 w-5" /> Pending Tests
+                      <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
+                        <FlaskConical className="h-5 w-5 text-amber-300" /> Pending Tests
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -177,24 +172,24 @@ export default function LabDashboard() {
                         return (
                           <div
                             key={test.id}
-                            className="p-4 rounded-lg border border-secondary/30 bg-secondary/5 space-y-4"
+                            className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-4"
                           >
                             <div className="flex items-center justify-between">
                               <div>
-                                <p className="font-semibold">{test.test_description}</p>
-                                <p className="text-xs text-muted-foreground">
+                                <p className="font-semibold text-slate-100">{test.test_description}</p>
+                                <p className="text-xs text-slate-400">
                                   Order ID: {test.id}
                                 </p>
                               </div>
-                              <Badge variant="secondary">{formatRoleLabel(test.status)}</Badge>
+                              <Badge className={workspaceAccentSoftBadgeClassName}>{formatRoleLabel(test.status)}</Badge>
                             </div>
-                            <div className="space-y-3 pt-2 border-t">
-                              <h4 className="font-medium text-sm">Upload Results</h4>
+                            <div className="space-y-3 border-t border-white/10 pt-2">
+                              <h4 className="text-sm font-medium text-slate-100">Upload Results</h4>
                               <div className="space-y-2">
-                                <Label>Result Summary</Label>
+                                <Label className="text-slate-200">Result Summary</Label>
                                 <Textarea
                                   placeholder="Enter test findings and values..."
-                                  className="min-h-[80px]"
+                                  className={`${staffTextareaClassName} min-h-[80px]`}
                                   value={draft.reportSummary}
                                   onChange={(e) =>
                                     setDrafts((current) => ({
@@ -205,10 +200,11 @@ export default function LabDashboard() {
                                 />
                               </div>
                               <div className="space-y-2">
-                                <Label>Report File (optional)</Label>
+                                <Label className="text-slate-200">Report File (optional)</Label>
                                 <Input
                                   type="file"
                                   accept=".pdf,image/png,image/jpeg,image/jpg"
+                                  className={staffInputClassName}
                                   onChange={(e) =>
                                     setDrafts((current) => ({
                                       ...current,
@@ -220,7 +216,7 @@ export default function LabDashboard() {
                                   }
                                 />
                                 {draft.reportFile && (
-                                  <p className="text-xs text-muted-foreground">
+                                  <p className="text-xs text-slate-400">
                                     Selected file: {draft.reportFile.name}
                                   </p>
                                 )}
@@ -233,7 +229,7 @@ export default function LabDashboard() {
                                     reportFile: draft.reportFile,
                                   })
                                 }
-                                className="gradient-accent border-0 gap-2 text-accent-foreground"
+                                className={staffPrimaryButtonClassName}
                                 disabled={!draft.reportSummary.trim() || uploadMutation.isPending}
                               >
                                 <Upload className="h-4 w-4" />
@@ -247,28 +243,28 @@ export default function LabDashboard() {
                   </Card>
                 )}
 
-                <Card>
-                  <CardHeader>
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileText className="h-5 w-5 text-primary" /> Completed Tests
-                    </CardTitle>
-                  </CardHeader>
+                <Card className={staffCardClassName}>
+                    <CardHeader>
+                      <CardTitle className="text-lg flex items-center gap-2 text-slate-100">
+                      <FileText className="h-5 w-5 text-amber-300" /> Completed Tests
+                      </CardTitle>
+                    </CardHeader>
                   <CardContent className="space-y-3">
                     {completedTests.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">
+                      <p className="text-sm text-slate-400">
                         No completed lab reports are available for this patient yet.
                       </p>
                     ) : (
                       completedTests.map((test) => (
-                        <div key={test.id} className="p-3 rounded-lg border">
+                        <div key={test.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-3">
                           <div className="flex justify-between items-center mb-2">
-                            <p className="font-medium text-sm">{test.test_description}</p>
-                            <Badge>{formatRoleLabel(test.status)}</Badge>
+                            <p className="text-sm font-medium text-slate-100">{test.test_description}</p>
+                            <Badge className={workspaceAccentSoftBadgeClassName}>{formatRoleLabel(test.status)}</Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground mb-2">
+                          <p className="mb-2 text-xs text-slate-400">
                             {formatDate(test.created_at)} • Ordered by {test.ordered_by_name}
                           </p>
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          <p className="whitespace-pre-wrap text-sm text-slate-300">
                             {test.report_summary}
                           </p>
                           {test.file_url && (
@@ -276,7 +272,7 @@ export default function LabDashboard() {
                               href={resolveApiUrl(test.file_url)}
                               target="_blank"
                               rel="noreferrer"
-                              className="inline-flex mt-2 text-sm text-primary hover:underline"
+                              className="mt-2 inline-flex text-sm text-amber-300 hover:text-amber-200 hover:underline"
                             >
                               Open attached report
                             </a>
@@ -291,6 +287,6 @@ export default function LabDashboard() {
           </>
         )}
       </div>
-    </div>
+    </StaffPortalShell>
   );
 }

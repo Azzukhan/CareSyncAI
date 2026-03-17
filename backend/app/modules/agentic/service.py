@@ -22,6 +22,8 @@ from app.models import (
     CarePlanStatus,
     CarePlanType,
     HealthMetric,
+    LabOrder,
+    LabReport,
     MedicationOrder,
     PatientProfile,
     User,
@@ -176,6 +178,7 @@ def _conversation_query(user_id: str) -> Select[tuple[AgenticConversation]]:
     return select(AgenticConversation).where(
         AgenticConversation.user_id == user_id,
         AgenticConversation.is_active.is_(True),
+        AgenticConversation.is_deleted.is_(False),
     )
 
 
@@ -408,17 +411,18 @@ async def list_conversations_response(
         .scalars()
         .all()
     )
-    return [
-        AgentConversationSummary(
-            id=conversation.id,
-            agent=conversation.agent,
-            title=conversation.title,
-            starred=conversation.starred,
-            updated_at=conversation.updated_at,
-            message_count=len([message for message in conversation.messages if message.is_active]),
-        )
-        for conversation in conversations
-    ]
+    return [_map_conversation_summary(conversation) for conversation in conversations]
+
+
+def _map_conversation_summary(conversation: AgenticConversation) -> AgentConversationSummary:
+    return AgentConversationSummary(
+        id=conversation.id,
+        agent=conversation.agent,
+        title=conversation.title,
+        starred=conversation.starred,
+        updated_at=conversation.updated_at,
+        message_count=len([message for message in conversation.messages if message.is_active]),
+    )
 
 
 async def get_conversation_detail_response(
@@ -455,10 +459,21 @@ async def star_conversation_response(
     await db.commit()
 
 
+async def update_conversation_title_response(
+    db: AsyncSession, *, user: User, conversation_id: str, title: str
+) -> AgentConversationSummary:
+    conversation = await _get_conversation_or_404(db, user.id, conversation_id)
+    conversation.title = title.strip()
+    conversation.updated_at = _utcnow()
+    await db.commit()
+    return _map_conversation_summary(conversation)
+
+
 async def delete_conversation_response(
     db: AsyncSession, *, user: User, conversation_id: str
 ) -> None:
     conversation = await _get_conversation_or_404(db, user.id, conversation_id)
+    conversation.is_deleted = True
     conversation.is_active = False
     conversation.updated_at = _utcnow()
     await db.commit()
@@ -517,6 +532,29 @@ async def _build_context_snapshot(db: AsyncSession, user: User) -> tuple[Agentic
                 _parse_list(patient_profile.chronic_conditions) if patient_profile else []
             ),
         }
+        lab_reports = list(
+            (
+                await db.execute(
+                    select(LabReport, LabOrder, User.full_name)
+                    .join(LabOrder, LabReport.lab_order_id == LabOrder.id)
+                    .join(User, LabOrder.requested_by_user_id == User.id)
+                    .where(LabOrder.patient_user_id == user.id)
+                    .order_by(LabReport.created_at.desc())
+                    .limit(10)
+                )
+            ).all()
+        )
+        payload["lab_reports"] = [
+            {
+                "test_description": order.test_description,
+                "status": order.status,
+                "ordered_by_name": ordered_by_name,
+                "report_summary": report.report_summary,
+                "file_attached": bool(report.file_url),
+                "created_at": report.created_at.isoformat(),
+            }
+            for report, order, ordered_by_name in lab_reports
+        ]
 
     if profile.share_medications:
         medications = list(

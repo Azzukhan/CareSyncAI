@@ -10,6 +10,8 @@ from app.modules.agentic.schemas import (
     AgentConversationDetailResponse,
     AgentConversationListResponse,
     AgentConversationStarRequest,
+    AgentConversationSummary,
+    AgentConversationUpdateRequest,
     AgentMutationResponse,
     AgentProfileResponse,
     AgentProfileUpdateRequest,
@@ -33,6 +35,7 @@ from app.modules.agentic.service import (
     list_plans_response,
     query_agent_response,
     star_conversation_response,
+    update_conversation_title_response,
     update_plan_item_response,
     update_plan_response,
     update_profile_response,
@@ -94,6 +97,21 @@ async def star_conversation(
         starred=payload.starred,
     )
     return AgentMutationResponse(success=True)
+
+
+@router.patch("/conversations/{conversation_id}", response_model=AgentConversationSummary)
+async def update_conversation(
+    conversation_id: str,
+    payload: AgentConversationUpdateRequest,
+    db: DbSession,
+    current_user: Annotated[User, Depends(require_roles(UserRole.PATIENT))],
+) -> AgentConversationSummary:
+    return await update_conversation_title_response(
+        db,
+        user=current_user,
+        conversation_id=conversation_id,
+        title=payload.title,
+    )
 
 
 @router.delete("/conversations/{conversation_id}", response_model=AgentMutationResponse)

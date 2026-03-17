@@ -4,16 +4,19 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import {
   Apple,
-  ArrowRight,
+  Check,
+  ChevronsRight,
   Dumbbell,
   Loader2,
   MessageSquareHeart,
   PanelLeftClose,
   PanelLeftOpen,
+  PencilLine,
   Plus,
   Settings2,
   Star,
   Trash2,
+  X,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -29,6 +32,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import PatientShell from "@/components/patient/PatientShell";
 import {
+  workspaceAccentPanelClassName,
+  workspaceAccentSoftBadgeClassName,
+  workspaceCardClassName,
+  workspaceEyebrowClassName,
+  workspaceInputClassName,
+  workspacePrimaryButtonClassName,
+  workspaceSecondaryButtonClassName,
+  workspaceTabListClassName,
+  workspaceTabTriggerClassName,
+} from "@/components/workspace/workspaceTheme";
+import {
   type AgentQueryResult,
   type CareAgentType,
   type CarePlanType,
@@ -41,6 +55,7 @@ import {
   listAgenticConversations,
   queryAgenticAssistant,
   starAgenticConversation,
+  updateAgenticConversation,
   updateAgenticProfile,
 } from "@/lib/api";
 import { useRequiredAuth } from "@/lib/auth";
@@ -70,17 +85,20 @@ interface AgentWorkspaceProps {
   agent: CareAgentType;
   title: string;
   subtitle: string;
-  accentClass: string;
   quickPrompts: string[];
   planType?: CarePlanType;
 }
 
-const panelLabels: Record<string, string> = {
+type ChatPanelKey = "summary" | "plan";
+
+const panelLabels: Record<ChatPanelKey, string> = {
   summary: "Summary",
   plan: "Plan",
-  calendar: "Calendar",
-  history: "History",
 };
+
+const profileFieldClassName = workspaceInputClassName;
+const profileTextareaClassName = `${profileFieldClassName} min-h-[110px] resize-y`;
+const profileCardClassName = cn("rounded-[26px] p-5", workspaceCardClassName);
 
 function timeAgo(value: string | number): string {
   const timestamp = typeof value === "number" ? value : Date.parse(value);
@@ -104,6 +122,18 @@ function textToList(value: string): string[] {
 
 function createLocalId(): string {
   return `local_${Date.now()}_${Math.round(Math.random() * 1000)}`;
+}
+
+function isLocalConversationId(value: string): boolean {
+  return value.startsWith("local_");
+}
+
+function truncateConversationTitle(title: string, maxLength = 34): string {
+  const normalized = title.trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
 }
 
 function conversationMessagesToUi(detail: ConversationDetail | undefined): LocalMessage[] {
@@ -140,179 +170,126 @@ function getAgentIdentity(agent: CareAgentType) {
     case "exercise":
       return {
         icon: Dumbbell,
-        glowClass: "from-cyan-500/20 via-emerald-500/10 to-slate-900",
-        pillClass: "border-cyan-400/40 bg-cyan-500/10 text-cyan-100",
+        glowClass: "from-amber-500/16 via-slate-900 to-slate-900",
+        pillClass: workspaceAccentSoftBadgeClassName,
       };
     case "diet":
       return {
         icon: Apple,
-        glowClass: "from-amber-500/20 via-emerald-500/10 to-slate-900",
-        pillClass: "border-amber-400/40 bg-amber-500/10 text-amber-100",
+        glowClass: "from-amber-500/16 via-slate-900 to-slate-900",
+        pillClass: workspaceAccentSoftBadgeClassName,
       };
     case "medical":
     default:
       return {
         icon: MessageSquareHeart,
-        glowClass: "from-violet-500/20 via-cyan-500/10 to-slate-900",
-        pillClass: "border-violet-400/40 bg-violet-500/10 text-violet-100",
+        glowClass: "from-amber-500/16 via-slate-900 to-slate-900",
+        pillClass: workspaceAccentSoftBadgeClassName,
       };
   }
 }
 
 function ConversationPanels({
+  agent,
   message,
-  accentClass,
 }: {
+  agent: CareAgentType;
   message: LocalMessage;
-  accentClass: string;
 }) {
   const responseData = message.responseData;
   if (!responseData) return null;
-  const defaultValue =
-    message.preferredPanel && panelLabels[message.preferredPanel]
-      ? message.preferredPanel
+  const visiblePanels: ChatPanelKey[] =
+    agent === "medical"
+      ? ["summary"]
       : responseData.plan
-        ? "plan"
-        : responseData.calendar_preview.length > 0
-          ? "calendar"
-          : responseData.yesterday_summary
-            ? "history"
-            : "summary";
+        ? ["summary", "plan"]
+        : ["summary"];
+
+  const defaultValue: ChatPanelKey =
+    message.preferredPanel === "plan" && visiblePanels.includes("plan") ? "plan" : "summary";
+
+  const summaryPanel = (
+    <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+      <div className="prose prose-invert max-w-none prose-p:leading-6 prose-li:leading-6 prose-strong:text-white">
+        <ReactMarkdown>{message.text}</ReactMarkdown>
+      </div>
+    </div>
+  );
+
+  const planPanel = responseData.plan ? (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <h4 className="font-medium">{responseData.plan.title}</h4>
+          <Badge variant="outline" className="border-white/20 text-slate-300">
+            v{responseData.plan.version}
+          </Badge>
+        </div>
+        <p className="mt-2 text-xs text-slate-400">
+          {formatDate(responseData.plan.start_date)}
+          {responseData.plan.end_date ? ` to ${formatDate(responseData.plan.end_date)}` : ""}
+        </p>
+        {responseData.plan.summary ? (
+          <p className="mt-2 text-sm text-slate-300">{responseData.plan.summary}</p>
+        ) : null}
+      </div>
+
+      <div className="space-y-2">
+        {responseData.plan.items.slice(0, 6).map((item) => (
+          <div
+            key={item.id}
+            className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">{item.title}</p>
+                <p className="text-xs text-slate-400">
+                  {[item.scheduled_day, item.meal_slot, item.target_time]
+                    .filter(Boolean)
+                    .join(" • ")}
+                </p>
+              </div>
+              {item.duration_minutes ? (
+                <Badge variant="outline" className="border-white/10 text-slate-300">
+                  {item.duration_minutes} min
+                </Badge>
+              ) : item.calories ? (
+                <Badge variant="outline" className="border-white/10 text-slate-300">
+                  {Math.round(item.calories)} kcal
+                </Badge>
+              ) : null}
+            </div>
+            {item.instructions ? (
+              <p className="mt-2 text-xs text-slate-400">{item.instructions}</p>
+            ) : null}
+          </div>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <p className="mt-4 text-sm text-slate-400">No structured plan attached to this reply.</p>
+  );
+
+  if (visiblePanels.length === 1) {
+    return <div className="mt-4">{summaryPanel}</div>;
+  }
 
   return (
     <Tabs defaultValue={defaultValue} className="mt-4">
-      <TabsList className="grid w-full grid-cols-4 bg-slate-950/50">
-        {Object.entries(panelLabels).map(([value, label]) => (
-          <TabsTrigger key={value} value={value} className="text-[11px]">
-            {label}
+      <TabsList className={cn("grid w-full grid-cols-2", workspaceTabListClassName)}>
+        {visiblePanels.map((value) => (
+          <TabsTrigger key={value} value={value} className={cn("text-[11px]", workspaceTabTriggerClassName)}>
+            {panelLabels[value]}
           </TabsTrigger>
         ))}
       </TabsList>
 
-      <TabsContent value="summary" className="mt-4 space-y-3 text-sm text-slate-200/90">
-        {responseData.highlights.length > 0 ? (
-          <div className="space-y-2">
-            {responseData.highlights.map((item) => (
-              <div key={item} className="flex gap-2">
-                <ArrowRight className={cn("mt-0.5 h-4 w-4 shrink-0", accentClass)} />
-                <span>{item}</span>
-              </div>
-            ))}
-          </div>
-        ) : null}
+      <TabsContent value="summary" className="mt-4">
+        {summaryPanel}
       </TabsContent>
 
       <TabsContent value="plan" className="mt-4">
-        {responseData.plan ? (
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-              <div className="flex flex-wrap items-center gap-2">
-                <h4 className="font-medium">{responseData.plan.title}</h4>
-                <Badge variant="outline" className="border-white/20 text-slate-300">
-                  v{responseData.plan.version}
-                </Badge>
-              </div>
-              <p className="mt-2 text-xs text-slate-400">
-                {formatDate(responseData.plan.start_date)}
-                {responseData.plan.end_date ? ` to ${formatDate(responseData.plan.end_date)}` : ""}
-              </p>
-              {responseData.plan.summary ? (
-                <p className="mt-2 text-sm text-slate-300">{responseData.plan.summary}</p>
-              ) : null}
-            </div>
-
-            <div className="space-y-2">
-              {responseData.plan.items.slice(0, 6).map((item) => (
-                <div
-                  key={item.id}
-                  className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <p className="font-medium">{item.title}</p>
-                      <p className="text-xs text-slate-400">
-                        {[item.scheduled_day, item.meal_slot, item.target_time]
-                          .filter(Boolean)
-                          .join(" • ")}
-                      </p>
-                    </div>
-                    {item.duration_minutes ? (
-                      <Badge variant="outline" className="border-white/10 text-slate-300">
-                        {item.duration_minutes} min
-                      </Badge>
-                    ) : item.calories ? (
-                      <Badge variant="outline" className="border-white/10 text-slate-300">
-                        {Math.round(item.calories)} kcal
-                      </Badge>
-                    ) : null}
-                  </div>
-                  {item.instructions ? (
-                    <p className="mt-2 text-xs text-slate-400">{item.instructions}</p>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-400">No structured plan attached to this reply.</p>
-        )}
-      </TabsContent>
-
-      <TabsContent value="calendar" className="mt-4">
-        {responseData.calendar_preview.length > 0 ? (
-          <div className="space-y-2">
-            {responseData.calendar_preview.map((event) => (
-              <div
-                key={event.id}
-                className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/40 px-3 py-3 text-sm"
-              >
-                <div>
-                  <p className="font-medium">{event.title}</p>
-                  <p className="text-xs text-slate-400">
-                    {formatDate(event.scheduled_for)}
-                    {event.target_time ? ` • ${event.target_time}` : ""}
-                    {event.meal_slot ? ` • ${event.meal_slot}` : ""}
-                  </p>
-                </div>
-                {event.status ? (
-                  <Badge variant="outline" className="border-white/10 text-slate-300">
-                    {event.status}
-                  </Badge>
-                ) : null}
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-400">No calendar preview available for this reply.</p>
-        )}
-      </TabsContent>
-
-      <TabsContent value="history" className="mt-4">
-        {responseData.yesterday_summary ? (
-          <div className="grid gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-4 sm:grid-cols-2">
-            <div>
-              <p className="text-xs uppercase tracking-[0.2em] text-slate-500">Yesterday</p>
-              <p className="mt-1 text-sm text-slate-300">
-                {formatDate(responseData.yesterday_summary.date)}
-              </p>
-            </div>
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              {[
-                ["Planned", responseData.yesterday_summary.planned_count],
-                ["Done", responseData.yesterday_summary.completed_count],
-                ["Missed", responseData.yesterday_summary.missed_count],
-                ["Skipped", responseData.yesterday_summary.skipped_count],
-              ].map(([label, value]) => (
-                <div key={label} className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-                  <p className="text-xs text-slate-400">{label}</p>
-                  <p className="mt-1 text-xl font-semibold">{value}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <p className="mt-4 text-sm text-slate-400">No adherence summary available yet.</p>
-        )}
+        {planPanel}
       </TabsContent>
     </Tabs>
   );
@@ -364,76 +341,198 @@ function ProfileSheet({
         {trigger ?? (
           <Button
             variant="outline"
-            className="border-white/10 bg-white/5 text-slate-100 hover:bg-white/10"
+            className={cn("justify-center", workspaceSecondaryButtonClassName)}
           >
             <Settings2 className="mr-2 h-4 w-4" /> Context
           </Button>
         )}
       </SheetTrigger>
-      <SheetContent className="w-full overflow-y-auto border-white/10 bg-slate-950 text-slate-100 sm:max-w-xl">
+      <SheetContent className="w-full overflow-y-auto border-white/10 bg-[radial-gradient(circle_at_top,_rgba(245,158,11,0.12),_rgba(2,6,23,0.96)_38%)] text-slate-100 sm:max-w-2xl">
         <SheetHeader>
           <SheetTitle className="text-slate-100">Patient Context</SheetTitle>
         </SheetHeader>
-        <div className="mt-6 space-y-4">
-          <div className="grid gap-2">
-            <Label>Goals</Label>
-            <Textarea value={goals} onChange={(e) => setGoals(e.target.value)} />
+        <div className="mt-6 space-y-5">
+          <div className="rounded-[28px] border border-amber-400/20 bg-slate-950/55 p-5 shadow-[0_18px_48px_rgba(211,177,77,0.12)]">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-amber-300/80">
+              CareSync Context Studio
+            </p>
+            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300">
+              Shape what the agent sees about your goals, routine, and consent settings. Use commas
+              for short lists and fuller notes where nuance matters.
+            </p>
           </div>
-          <div className="grid gap-2">
-            <Label>Allergies</Label>
-            <Input value={allergies} onChange={(e) => setAllergies(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Dietary Constraints</Label>
-            <Input value={constraints} onChange={(e) => setConstraints(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Pain or Injuries</Label>
-            <Textarea value={pain} onChange={(e) => setPain(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Motivation Style</Label>
-            <Input value={motivation} onChange={(e) => setMotivation(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Equipment Access</Label>
-            <Textarea value={equipment} onChange={(e) => setEquipment(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Schedule Preferences</Label>
-            <Input value={schedule} onChange={(e) => setSchedule(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Sleep / Work Routine</Label>
-            <Textarea value={sleepRoutine} onChange={(e) => setSleepRoutine(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Plan Horizon (days)</Label>
-            <Input value={planHorizon} onChange={(e) => setPlanHorizon(e.target.value)} />
-          </div>
-          <div className="grid gap-2">
-            <Label>Additional Notes</Label>
-            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} />
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-            <p className="mb-3 text-sm font-medium">Data Consent</p>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Medical history</span>
-                <Switch checked={shareMedicalHistory} onCheckedChange={setShareMedicalHistory} />
+
+          <div className="grid gap-4 xl:grid-cols-2">
+            <section className={profileCardClassName}>
+              <div className="mb-4">
+                <p className={workspaceEyebrowClassName}>
+                  Health Priorities
+                </p>
+                <p className="mt-2 text-sm text-slate-400">
+                  Tell the assistant what to prioritize, avoid, and monitor.
+                </p>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Medications</span>
-                <Switch checked={shareMedications} onCheckedChange={setShareMedications} />
+              <div className="space-y-4">
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Goals</Label>
+                  <Textarea
+                    className={profileTextareaClassName}
+                    value={goals}
+                    onChange={(e) => setGoals(e.target.value)}
+                    placeholder="Lower stress, improve asthma control, feel stronger by summer"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Allergies</Label>
+                  <Input
+                    className={profileFieldClassName}
+                    value={allergies}
+                    onChange={(e) => setAllergies(e.target.value)}
+                    placeholder="Shellfish, penicillin"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Dietary Constraints</Label>
+                  <Input
+                    className={profileFieldClassName}
+                    value={constraints}
+                    onChange={(e) => setConstraints(e.target.value)}
+                    placeholder="Low sodium, dairy-free, vegetarian"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Pain or Injuries</Label>
+                  <Textarea
+                    className={profileTextareaClassName}
+                    value={pain}
+                    onChange={(e) => setPain(e.target.value)}
+                    placeholder="Lower back tightness after long walks, right shoulder strain"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Additional Notes</Label>
+                  <Textarea
+                    className={profileTextareaClassName}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder="Upcoming GP visit, medication changes, special concerns"
+                  />
+                </div>
               </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-300">Health metrics</span>
-                <Switch checked={shareHealthMetrics} onCheckedChange={setShareHealthMetrics} />
+            </section>
+
+            <section className={profileCardClassName}>
+              <div className="mb-4">
+                <p className={workspaceEyebrowClassName}>
+                  Routine Design
+                </p>
+                <p className="mt-2 text-sm text-slate-400">
+                  Help the assistant fit recommendations into your real-life schedule.
+                </p>
               </div>
+              <div className="space-y-4">
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Motivation Style</Label>
+                  <Input
+                    className={profileFieldClassName}
+                    value={motivation}
+                    onChange={(e) => setMotivation(e.target.value)}
+                    placeholder="Gentle encouragement, short checklists, direct coaching"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Equipment Access</Label>
+                  <Textarea
+                    className={profileTextareaClassName}
+                    value={equipment}
+                    onChange={(e) => setEquipment(e.target.value)}
+                    placeholder="Walking shoes, yoga mat, resistance bands, no gym access"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Schedule Preferences</Label>
+                  <Input
+                    className={profileFieldClassName}
+                    value={schedule}
+                    onChange={(e) => setSchedule(e.target.value)}
+                    placeholder="Weekday mornings, lunch break, after 7 PM"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Sleep / Work Routine</Label>
+                  <Textarea
+                    className={profileTextareaClassName}
+                    value={sleepRoutine}
+                    onChange={(e) => setSleepRoutine(e.target.value)}
+                    placeholder="Sleep at 11 PM, school run at 8 AM, office 9 to 5"
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label className="text-slate-200">Plan Horizon (days)</Label>
+                  <Input
+                    className={profileFieldClassName}
+                    value={planHorizon}
+                    onChange={(e) => setPlanHorizon(e.target.value)}
+                    placeholder="28"
+                  />
+                </div>
+              </div>
+            </section>
+          </div>
+
+          <section className="rounded-[28px] border border-white/10 bg-slate-950/65 p-5 shadow-[0_18px_48px_rgba(15,23,42,0.36)]">
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className={workspaceEyebrowClassName}>
+                  Data Consent
+                </p>
+                <p className="mt-2 text-sm text-slate-400">
+                  Choose which protected context the AI can use while generating guidance.
+                </p>
+              </div>
+              <Badge variant="outline" className={workspaceAccentSoftBadgeClassName}>
+                {profile?.completeness_score ?? 0}% context ready
+              </Badge>
             </div>
-          </div>
+            <div className="grid gap-3 md:grid-cols-3">
+              {[
+                {
+                  label: "Medical history",
+                  description: "Conditions, visits, and clinical background.",
+                  checked: shareMedicalHistory,
+                  onCheckedChange: setShareMedicalHistory,
+                },
+                {
+                  label: "Medications",
+                  description: "Prescriptions and active treatment context.",
+                  checked: shareMedications,
+                  onCheckedChange: setShareMedications,
+                },
+                {
+                  label: "Health metrics",
+                  description: "Vitals, measurements, and tracked health data.",
+                  checked: shareHealthMetrics,
+                  onCheckedChange: setShareHealthMetrics,
+                },
+              ].map((item) => (
+                <div
+                  key={item.label}
+                  className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-medium text-slate-100">{item.label}</p>
+                      <p className="mt-1 text-xs leading-5 text-slate-400">{item.description}</p>
+                    </div>
+                    <Switch checked={item.checked} onCheckedChange={item.onCheckedChange} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+
           <Button
-            className="w-full"
+            className={cn("w-full rounded-2xl", workspacePrimaryButtonClassName)}
             onClick={() =>
               onSave({
                 goals: textToList(goals),
@@ -464,7 +563,6 @@ export default function AgentWorkspace({
   agent,
   title,
   subtitle,
-  accentClass,
   quickPrompts,
   planType,
 }: AgentWorkspaceProps) {
@@ -472,12 +570,14 @@ export default function AgentWorkspace({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const { conversationId } = useParams<{ conversationId?: string }>();
-  const { token, user, logout } = useRequiredAuth("patient");
+  const { isAuthenticated, token, user, logout } = useRequiredAuth("patient");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [activeConversationId, setActiveConversationId] = useState<string>(conversationId ?? "");
   const [input, setInput] = useState("");
   const [conversationSidebarOpen, setConversationSidebarOpen] = useState(true);
   const [draftConversations, setDraftConversations] = useState<Record<string, DraftConversation>>({});
+  const [editingConversationId, setEditingConversationId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
   const agentIdentity = useMemo(() => getAgentIdentity(agent), [agent]);
 
   useEffect(() => {
@@ -491,19 +591,23 @@ export default function AgentWorkspace({
   const profileQuery = useQuery({
     queryKey: ["agentic-profile"],
     queryFn: () => getAgenticProfile(token!),
-    enabled: Boolean(token),
+    enabled: isAuthenticated && Boolean(token),
   });
 
   const conversationsQuery = useQuery({
     queryKey: ["agentic-conversations", agent],
     queryFn: () => listAgenticConversations(token!, agent),
-    enabled: Boolean(token),
+    enabled: isAuthenticated && Boolean(token),
   });
 
   const detailQuery = useQuery({
     queryKey: ["agentic-conversation", activeConversationId],
     queryFn: () => getAgenticConversation(token!, activeConversationId),
-    enabled: Boolean(token) && Boolean(activeConversationId) && !activeConversationId.startsWith("local_"),
+    enabled:
+      isAuthenticated &&
+      Boolean(token) &&
+      Boolean(activeConversationId) &&
+      !activeConversationId.startsWith("local_"),
   });
 
   const updateProfileMutation = useMutation({
@@ -513,6 +617,27 @@ export default function AgentWorkspace({
       toast({ title: "Patient context updated" });
     },
   });
+
+  const setDraftConversation = (
+    conversationId: string,
+    updater: (draft: DraftConversation | undefined) => DraftConversation | undefined,
+  ) => {
+    setDraftConversations((current) => {
+      const nextValue = updater(current[conversationId]);
+      if (!nextValue) {
+        if (!(conversationId in current)) {
+          return current;
+        }
+        const updated = { ...current };
+        delete updated[conversationId];
+        return updated;
+      }
+      return {
+        ...current,
+        [conversationId]: nextValue,
+      };
+    });
+  };
 
   const mergedSummaries = useMemo(() => {
     const remote = conversationsQuery.data ?? [];
@@ -543,10 +668,38 @@ export default function AgentWorkspace({
     );
   }, [activeConversationId, agent, mergedSummaries, navigate]);
 
+  useEffect(() => {
+    if (!editingConversationId) {
+      return;
+    }
+    const nextTitle = mergedSummaries.find((item) => item.id === editingConversationId)?.title;
+    if (!nextTitle) {
+      setEditingConversationId(null);
+      setTitleDraft("");
+    }
+  }, [editingConversationId, mergedSummaries]);
+
   const mappedDetailMessages = useMemo(
     () => conversationMessagesToUi(detailQuery.data),
     [detailQuery.data],
   );
+
+  useEffect(() => {
+    if (!detailQuery.data) return;
+    const conversationId = detailQuery.data.id;
+    setDraftConversation(conversationId, (draft) => {
+      if (!draft || draft.messages.some((message) => message.isThinking)) {
+        return draft;
+      }
+      return {
+        ...draft,
+        title: detailQuery.data.title,
+        starred: detailQuery.data.starred,
+        updatedAt: Date.parse(detailQuery.data.updated_at),
+        messages: conversationMessagesToUi(detailQuery.data),
+      };
+    });
+  }, [detailQuery.data]);
 
   const activeMessages = useMemo(() => {
     if (!activeConversationId) return [] as LocalMessage[];
@@ -560,6 +713,29 @@ export default function AgentWorkspace({
     () => mergedSummaries.find((item) => item.id === activeConversationId),
     [activeConversationId, mergedSummaries],
   );
+  const activeConversationTitle = activeSummary?.title ?? "";
+  const activeConversationTitlePreview = activeConversationTitle
+    ? truncateConversationTitle(activeConversationTitle, 36)
+    : "";
+
+  const syncConversationSummaryCache = (summary: ConversationSummary) => {
+    queryClient.setQueryData<ConversationSummary[] | undefined>(
+      ["agentic-conversations", agent],
+      (current) => current?.map((item) => (item.id === summary.id ? summary : item)) ?? current,
+    );
+    queryClient.setQueryData<ConversationDetail | undefined>(
+      ["agentic-conversation", summary.id],
+      (current) =>
+        current
+          ? {
+              ...current,
+              title: summary.title,
+              starred: summary.starred,
+              updated_at: summary.updated_at,
+            }
+          : current,
+    );
+  };
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -651,8 +827,50 @@ export default function AgentWorkspace({
     mutationFn: async (input: { id: string; starred: boolean }) => {
       await starAgenticConversation(token!, input.id, input.starred);
     },
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
+      setDraftConversation(variables.id, (draft) =>
+        draft
+          ? {
+              ...draft,
+              starred: variables.starred,
+              updatedAt: Date.now(),
+            }
+          : draft,
+      );
+      if (activeSummary && activeSummary.id === variables.id) {
+        syncConversationSummaryCache({
+          ...activeSummary,
+          starred: variables.starred,
+        });
+      }
       void queryClient.invalidateQueries({ queryKey: ["agentic-conversations", agent] });
+    },
+  });
+
+  const updateTitleMutation = useMutation({
+    mutationFn: async (payload: { id: string; title: string }) =>
+      updateAgenticConversation(token!, payload.id, { title: payload.title }),
+    onSuccess: (updatedConversation) => {
+      setDraftConversation(updatedConversation.id, (draft) =>
+        draft
+          ? {
+              ...draft,
+              title: updatedConversation.title,
+            }
+          : draft,
+      );
+      syncConversationSummaryCache(updatedConversation);
+      void queryClient.invalidateQueries({ queryKey: ["agentic-conversations", agent] });
+      setEditingConversationId(null);
+      setTitleDraft("");
+      toast({ title: "Conversation title updated" });
+    },
+    onError: (error) => {
+      toast({
+        title: "Unable to update title",
+        description: error instanceof Error ? error.message : "Try again.",
+        variant: "destructive",
+      });
     },
   });
 
@@ -663,30 +881,35 @@ export default function AgentWorkspace({
     onSuccess: (_, deletedId) => {
       void queryClient.invalidateQueries({ queryKey: ["agentic-conversations", agent] });
       void queryClient.removeQueries({ queryKey: ["agentic-conversation", deletedId] });
-      setDraftConversations((current) => {
-        const updated = { ...current };
-        delete updated[deletedId];
-        return updated;
-      });
-      const fallback = mergedSummaries.find((item) => item.id !== deletedId);
-      if (fallback) {
-        navigate(
-          fallback.id.startsWith("local_")
-            ? `/dashboard/patient/ai/${agent}`
-            : `/dashboard/patient/ai/${agent}/${fallback.id}`,
-          { replace: true },
-        );
-      } else {
-        navigate(`/dashboard/patient/ai/${agent}`, { replace: true });
-        setActiveConversationId("");
+      setDraftConversation(deletedId, () => undefined);
+      if (editingConversationId === deletedId) {
+        setEditingConversationId(null);
+        setTitleDraft("");
       }
+
+      if (activeConversationId === deletedId) {
+        const fallback = mergedSummaries.find((item) => item.id !== deletedId);
+        if (fallback) {
+          setActiveConversationId(fallback.id);
+          navigate(
+            isLocalConversationId(fallback.id)
+              ? `/dashboard/patient/ai/${agent}`
+              : `/dashboard/patient/ai/${agent}/${fallback.id}`,
+            { replace: true },
+          );
+        } else {
+          navigate(`/dashboard/patient/ai/${agent}`, { replace: true });
+          setActiveConversationId("");
+        }
+      }
+      toast({ title: "Conversation archived" });
     },
   });
 
   const ensureDraftConversation = () => {
     const existing = activeConversationId ? draftConversations[activeConversationId] : undefined;
     if (existing) return existing.id;
-    if (activeConversationId && !activeConversationId.startsWith("local_")) return activeConversationId;
+    if (activeConversationId && !isLocalConversationId(activeConversationId)) return activeConversationId;
 
     const localId = activeConversationId || createLocalId();
     setDraftConversations((current) => ({
@@ -712,14 +935,27 @@ export default function AgentWorkspace({
     const conversationKey = ensureDraftConversation();
     const now = Date.now();
     setDraftConversations((current) => {
-      const existing = current[conversationKey] ?? {
-        id: conversationKey,
-        title: trimmed.slice(0, 48) + (trimmed.length > 48 ? "..." : ""),
-        starred: false,
-        updatedAt: now,
-        persisted: !conversationKey.startsWith("local_"),
-        messages: [],
-      };
+      const existing =
+        current[conversationKey] ??
+        (!isLocalConversationId(conversationKey) && activeConversationId === conversationKey
+          ? {
+              id: conversationKey,
+              title:
+                activeSummary?.title ??
+                trimmed.slice(0, 48) + (trimmed.length > 48 ? "..." : ""),
+              starred: activeSummary?.starred ?? false,
+              updatedAt: now,
+              persisted: true,
+              messages: activeMessages.filter((message) => !message.isThinking),
+            }
+          : {
+              id: conversationKey,
+              title: trimmed.slice(0, 48) + (trimmed.length > 48 ? "..." : ""),
+              starred: false,
+              updatedAt: now,
+              persisted: !isLocalConversationId(conversationKey),
+              messages: [],
+            });
       return {
         ...current,
         [conversationKey]: {
@@ -747,12 +983,16 @@ export default function AgentWorkspace({
   };
 
   const handleSelectConversation = (id: string) => {
+    setEditingConversationId(null);
+    setTitleDraft("");
     setActiveConversationId(id);
-    navigate(id.startsWith("local_") ? `/dashboard/patient/ai/${agent}` : `/dashboard/patient/ai/${agent}/${id}`);
+    navigate(isLocalConversationId(id) ? `/dashboard/patient/ai/${agent}` : `/dashboard/patient/ai/${agent}/${id}`);
   };
 
   const handleNewChat = () => {
     const localId = createLocalId();
+    setEditingConversationId(null);
+    setTitleDraft("");
     setDraftConversations((current) => ({
       ...current,
       [localId]: {
@@ -768,6 +1008,103 @@ export default function AgentWorkspace({
     navigate(`/dashboard/patient/ai/${agent}`);
   };
 
+  const handleToggleConversationStar = (conversation: ConversationSummary) => {
+    if (isLocalConversationId(conversation.id)) {
+      setDraftConversation(conversation.id, (draft) =>
+        draft
+          ? {
+              ...draft,
+              starred: !draft.starred,
+              updatedAt: Date.now(),
+            }
+          : draft,
+      );
+      return;
+    }
+    starMutation.mutate({
+      id: conversation.id,
+      starred: !conversation.starred,
+    });
+  };
+
+  const handleDeleteConversation = (conversation: ConversationSummary) => {
+    if (isLocalConversationId(conversation.id)) {
+      setDraftConversation(conversation.id, () => undefined);
+      if (editingConversationId === conversation.id) {
+        setEditingConversationId(null);
+        setTitleDraft("");
+      }
+      if (activeConversationId === conversation.id) {
+        const fallback = mergedSummaries.find((item) => item.id !== conversation.id);
+        if (fallback) {
+          setActiveConversationId(fallback.id);
+          navigate(
+            isLocalConversationId(fallback.id)
+              ? `/dashboard/patient/ai/${agent}`
+              : `/dashboard/patient/ai/${agent}/${fallback.id}`,
+            { replace: true },
+          );
+        } else {
+          setActiveConversationId("");
+          navigate(`/dashboard/patient/ai/${agent}`, { replace: true });
+        }
+      }
+      return;
+    }
+
+    deleteMutation.mutate(conversation.id);
+  };
+
+  const handleStartTitleEdit = (conversation: ConversationSummary) => {
+    if (activeConversationId !== conversation.id) {
+      handleSelectConversation(conversation.id);
+    }
+    setEditingConversationId(conversation.id);
+    setTitleDraft(conversation.title);
+  };
+
+  const handleCancelTitleEdit = () => {
+    setEditingConversationId(null);
+    setTitleDraft("");
+  };
+
+  const handleSaveConversationTitle = () => {
+    if (!activeSummary) {
+      return;
+    }
+    const trimmed = titleDraft.trim();
+    if (!trimmed) {
+      toast({
+        title: "Title is required",
+        description: "Use at least one visible character.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (trimmed === activeSummary.title.trim()) {
+      handleCancelTitleEdit();
+      return;
+    }
+    if (isLocalConversationId(activeSummary.id)) {
+      setDraftConversation(activeSummary.id, (draft) =>
+        draft
+          ? {
+              ...draft,
+              title: trimmed,
+              updatedAt: Date.now(),
+            }
+          : draft,
+      );
+      handleCancelTitleEdit();
+      return;
+    }
+    updateTitleMutation.mutate({ id: activeSummary.id, title: trimmed });
+  };
+
+  if (!isAuthenticated) {
+    return null;
+  }
+
   return (
     <PatientShell
       title={title}
@@ -781,7 +1118,7 @@ export default function AgentWorkspace({
         className={cn(
           "grid h-full gap-0 xl:grid-cols-[minmax(0,1fr)]",
           conversationSidebarOpen
-            ? "xl:grid-cols-[17.5rem_minmax(0,1fr)]"
+            ? "xl:grid-cols-[19rem_minmax(0,1fr)]"
             : "xl:grid-cols-[4.75rem_minmax(0,1fr)]",
         )}
       >
@@ -796,7 +1133,7 @@ export default function AgentWorkspace({
                     size="icon"
                     variant="outline"
                     title="Collapse sidebar"
-                    className="h-9 w-9 rounded-xl border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/10"
+                    className={cn("h-9 w-9 rounded-xl", workspaceSecondaryButtonClassName)}
                     onClick={() => setConversationSidebarOpen(false)}
                   >
                     <PanelLeftClose className="h-4 w-4" />
@@ -805,7 +1142,7 @@ export default function AgentWorkspace({
                 <Button
                   type="button"
                   variant="outline"
-                  className="w-full border-white/10 bg-white/[0.03] text-slate-100 hover:bg-white/10"
+                  className={cn("w-full", workspaceSecondaryButtonClassName)}
                   onClick={handleNewChat}
                 >
                   <Plus className="mr-2 h-4 w-4" />
@@ -818,7 +1155,7 @@ export default function AgentWorkspace({
                     <Button
                       type="button"
                       variant="outline"
-                      className="w-full justify-start border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/10"
+                      className={cn("w-full justify-center", workspaceSecondaryButtonClassName)}
                     >
                       <Settings2 className="mr-2 h-4 w-4" />
                       Context
@@ -834,72 +1171,68 @@ export default function AgentWorkspace({
               </CardHeader>
               <CardContent className="flex-1 min-h-0 pt-4">
                 <ScrollArea className="h-full pr-2">
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     {mergedSummaries.map((conversation) => (
                       <div
                         key={conversation.id}
                         className={cn(
-                          "w-full rounded-2xl border px-3 py-3 text-left transition-colors",
+                          "w-full rounded-[20px] border px-3.5 py-3 text-left shadow-[0_12px_30px_rgba(2,6,23,0.16)] transition-colors",
                           activeConversationId === conversation.id
-                            ? "border-cyan-400/40 bg-cyan-400/10"
-                            : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
+                            ? workspaceAccentPanelClassName
+                            : "border-white/10 bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]",
                         )}
                       >
-                        <div className="flex items-start justify-between gap-3">
+                        <div className="grid grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 gap-y-2">
                           <button
                             type="button"
-                            className="min-w-0 flex-1 text-left"
+                            className="min-w-0 text-left"
                             onClick={() => handleSelectConversation(conversation.id)}
                           >
-                            <p className="truncate text-sm font-medium text-slate-100">{conversation.title}</p>
+                            <p className="truncate text-sm font-semibold leading-5 text-slate-100">
+                              {truncateConversationTitle(conversation.title, 24)}
+                            </p>
                             <p className="mt-1 text-xs text-slate-400">
                               {conversation.message_count} turns • {timeAgo(conversation.updated_at)}
                             </p>
                           </button>
-                          <div className="flex shrink-0 items-center gap-1">
+                          <div className="flex shrink-0 items-center gap-1 rounded-full border border-white/10 bg-slate-950/55 p-1">
                             <Button
                               type="button"
                               size="icon"
                               variant="ghost"
-                              className="h-7 w-7 text-slate-300 hover:bg-white/10"
+                              title={conversation.starred ? "Unstar conversation" : "Star conversation"}
+                              className="h-6 w-6 rounded-full text-slate-300 hover:bg-white/10"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                if (conversation.id.startsWith("local_")) {
-                                  setDraftConversations((current) => ({
-                                    ...current,
-                                    [conversation.id]: {
-                                      ...current[conversation.id],
-                                      starred: !current[conversation.id].starred,
-                                    },
-                                  }));
-                                  return;
-                                }
-                                starMutation.mutate({
-                                  id: conversation.id,
-                                  starred: !conversation.starred,
-                                });
+                                handleToggleConversationStar(conversation);
                               }}
                             >
                               <Star
-                                className={cn("h-4 w-4", conversation.starred ? "fill-current text-amber-300" : "")}
+                                className={cn("h-3.5 w-3.5", conversation.starred ? "fill-current text-amber-300" : "")}
                               />
                             </Button>
                             <Button
                               type="button"
                               size="icon"
                               variant="ghost"
-                              className="h-7 w-7 text-rose-300 hover:bg-white/10"
+                              title="Rename conversation"
+                              className="h-6 w-6 rounded-full text-slate-300 hover:bg-white/10"
                               onClick={(event) => {
                                 event.stopPropagation();
-                                if (conversation.id.startsWith("local_")) {
-                                  setDraftConversations((current) => {
-                                    const updated = { ...current };
-                                    delete updated[conversation.id];
-                                    return updated;
-                                  });
-                                  return;
-                                }
-                                deleteMutation.mutate(conversation.id);
+                                handleStartTitleEdit(conversation);
+                              }}
+                            >
+                              <PencilLine className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="ghost"
+                              title="Archive conversation"
+                              className="h-6 w-6 rounded-full text-rose-300 hover:bg-white/10"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                handleDeleteConversation(conversation);
                               }}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -924,18 +1257,18 @@ export default function AgentWorkspace({
                 size="icon"
                 variant="outline"
                 title="Expand sidebar"
-                className="h-10 w-10 rounded-xl border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/10"
+                className={cn("h-10 w-10 rounded-xl", workspaceSecondaryButtonClassName)}
                 onClick={() => setConversationSidebarOpen(true)}
               >
                 <PanelLeftOpen className="h-4 w-4" />
               </Button>
-              <Button
-                type="button"
-                size="icon"
-                title="New chat"
-                className="h-10 w-10 rounded-2xl"
-                onClick={handleNewChat}
-              >
+                <Button
+                  type="button"
+                  size="icon"
+                  title="New chat"
+                  className={cn("h-10 w-10 rounded-2xl", workspacePrimaryButtonClassName)}
+                  onClick={handleNewChat}
+                >
                 <Plus className="h-4 w-4" />
               </Button>
               <ProfileSheet
@@ -947,7 +1280,7 @@ export default function AgentWorkspace({
                     size="icon"
                     variant="outline"
                     title="Context"
-                    className="h-10 w-10 rounded-2xl border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/10"
+                    className={cn("h-10 w-10 rounded-2xl", workspaceSecondaryButtonClassName)}
                   >
                     <Settings2 className="h-4 w-4" />
                   </Button>
@@ -964,7 +1297,7 @@ export default function AgentWorkspace({
                     className={cn(
                       "h-10 w-10 rounded-2xl border",
                       activeConversationId === conversation.id
-                        ? "border-cyan-400/40 bg-cyan-400/10 text-white"
+                        ? workspaceAccentPanelClassName
                         : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]",
                     )}
                     onClick={() => handleSelectConversation(conversation.id)}
@@ -995,14 +1328,98 @@ export default function AgentWorkspace({
                   <h2 className="truncate text-xl font-semibold tracking-tight text-slate-100">{title}</h2>
                   <p className="truncate text-sm text-slate-400">{subtitle}</p>
                   {activeSummary ? (
-                    <p className="truncate text-xs text-cyan-300/90">{activeSummary.title}</p>
+                    <div className="mt-3 flex flex-wrap items-center gap-2.5">
+                      {editingConversationId === activeSummary.id ? (
+                        <div className="flex min-w-[18rem] max-w-full items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 px-2 py-2">
+                          <Input
+                            value={titleDraft}
+                            onChange={(event) => setTitleDraft(event.target.value)}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter") {
+                                event.preventDefault();
+                                handleSaveConversationTitle();
+                              }
+                              if (event.key === "Escape") {
+                                event.preventDefault();
+                                handleCancelTitleEdit();
+                              }
+                            }}
+                            className="h-9 border-white/10 bg-slate-950/70 text-sm text-slate-100 placeholder:text-slate-500"
+                            placeholder="Rename this chat"
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            className="h-9 w-9 rounded-xl"
+                            onClick={handleSaveConversationTitle}
+                            disabled={updateTitleMutation.isPending}
+                          >
+                            <Check className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="outline"
+                            className={cn("h-9 w-9 rounded-xl", workspaceSecondaryButtonClassName)}
+                            onClick={handleCancelTitleEdit}
+                          >
+                            <X className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex max-w-full items-center gap-2 rounded-full border border-amber-400/20 bg-amber-400/10 px-3 py-1.5">
+                            <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-200/80">
+                              Chat
+                            </span>
+                            <span className="max-w-[17rem] truncate text-sm font-medium text-slate-100">
+                              {activeConversationTitlePreview}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 rounded-full border border-white/10 bg-slate-950/55 p-1">
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              title={activeSummary.starred ? "Unstar conversation" : "Star conversation"}
+                              className="h-8 w-8 rounded-full border-0 bg-transparent text-slate-200 hover:bg-white/10"
+                              onClick={() => handleToggleConversationStar(activeSummary)}
+                            >
+                              <Star
+                                className={cn("h-4 w-4", activeSummary.starred ? "fill-current text-amber-300" : "")}
+                              />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              title="Rename conversation"
+                              className="h-8 w-8 rounded-full border-0 bg-transparent text-slate-200 hover:bg-white/10"
+                              onClick={() => handleStartTitleEdit(activeSummary)}
+                            >
+                              <PencilLine className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              title="Archive conversation"
+                              className="h-8 w-8 rounded-full border-0 bg-transparent text-rose-200 hover:bg-rose-500/20"
+                              onClick={() => handleDeleteConversation(activeSummary)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
                   ) : null}
                 </div>
               </div>
               {planType ? (
                 <NavLink
                   to={`/dashboard/patient/calendar/${planType}`}
-                  className="text-sm text-cyan-300 transition-colors hover:text-cyan-200"
+                  className="text-sm text-amber-300 transition-colors hover:text-amber-200"
                 >
                   Open {planType} calendar
                 </NavLink>
@@ -1030,7 +1447,7 @@ export default function AgentWorkspace({
                       Ask for revisions, summaries, calendar changes, or yesterday feedback.
                     </p>
                     <div className="mt-4 rounded-2xl border border-white/8 bg-slate-950/30 p-3">
-                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-cyan-300/80">
+                      <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.22em] text-amber-300/80">
                         Suggested prompts
                       </p>
                       <div className="grid gap-2">
@@ -1039,7 +1456,7 @@ export default function AgentWorkspace({
                             key={prompt}
                             type="button"
                             onClick={() => handleSend(prompt)}
-                            className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-left text-sm text-slate-200 transition-colors hover:border-cyan-400/40 hover:bg-white/[0.04]"
+                            className="rounded-2xl border border-white/10 bg-slate-950/40 px-4 py-3 text-left text-sm text-slate-200 transition-colors hover:border-amber-400/30 hover:bg-white/[0.04]"
                           >
                             {prompt}
                           </button>
@@ -1060,7 +1477,7 @@ export default function AgentWorkspace({
                       className={cn(
                         "max-w-[85%] rounded-[28px] border px-4 py-3 shadow-sm",
                         message.sender === "user"
-                          ? "border-cyan-400/30 bg-cyan-400/10 text-slate-100"
+                          ? "border-amber-400/30 bg-amber-400/10 text-slate-100"
                           : message.error
                             ? "border-rose-400/30 bg-rose-400/10 text-slate-100"
                             : "border-white/10 bg-white/[0.04] text-slate-100",
@@ -1078,12 +1495,13 @@ export default function AgentWorkspace({
                         </div>
                       ) : (
                         <>
-                          <div className="prose prose-invert mt-3 max-w-none prose-p:leading-6 prose-li:leading-6 prose-strong:text-white">
-                            <ReactMarkdown>{message.text}</ReactMarkdown>
-                          </div>
-                          {message.sender === "assistant" ? (
-                            <ConversationPanels message={message} accentClass={accentClass} />
-                          ) : null}
+                          {message.sender === "assistant" && message.responseData ? (
+                            <ConversationPanels agent={agent} message={message} />
+                          ) : (
+                            <div className="prose prose-invert mt-3 max-w-none prose-p:leading-6 prose-li:leading-6 prose-strong:text-white">
+                              <ReactMarkdown>{message.text}</ReactMarkdown>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -1103,7 +1521,7 @@ export default function AgentWorkspace({
                     type="button"
                     size="sm"
                     variant="outline"
-                    className="border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/10"
+                    className={workspaceSecondaryButtonClassName}
                     onClick={() => handleSend(item)}
                   >
                     <ChevronsRight className="mr-1 h-3 w-3" />
@@ -1130,9 +1548,9 @@ export default function AgentWorkspace({
                   placeholder="Ask about what changed, what you missed yesterday, or what needs to improve."
                 />
                 <Button
-                  onClick={handleSend}
+                  onClick={() => handleSend()}
                   disabled={sendMutation.isPending || !input.trim()}
-                  className="h-11 rounded-full px-5"
+                  className={cn("h-11 rounded-full px-5", workspacePrimaryButtonClassName)}
                 >
                   {sendMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
                 </Button>

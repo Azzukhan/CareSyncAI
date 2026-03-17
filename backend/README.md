@@ -3,7 +3,7 @@
 Modular backend starter for the CareSync healthcare platform.
 
 ## Stack
-- Python 3.12
+- Python 3.12+
 - FastAPI
 - SQLAlchemy 2.0 (async, PostgreSQL via `asyncpg`)
 - Alembic
@@ -34,12 +34,12 @@ Structure:
 ```bash
 cd backend
 cp .env.example .env
-python3.12 -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install -e .
 alembic upgrade head
-uvicorn app.main:app --reload
+python -m uvicorn app.main:app --reload
 ```
 
 If you accidentally created `path/to/venv` inside `backend`, remove it first:
@@ -53,14 +53,30 @@ API docs:
 
 ## Example API Flow
 
-1. `POST /api/v1/auth/register` for each role.
-2. `POST /api/v1/auth/login` to get bearer token.
+1. Patients self-register via `POST /api/v1/auth/register`.
+2. GP, specialist, lab, and pharmacy users sign in through the same `POST /api/v1/auth/login` endpoint with provisioned credentials.
 3. Patient updates profile via `PUT /api/v1/patients/me/profile`.
 4. GP logs visit and referrals (`/api/v1/gp/*`).
 5. Specialist adds notes/medication (`/api/v1/specialist/*`).
 6. Lab uploads reports (`/api/v1/lab/reports`).
 7. Pharmacy dispenses medication (`/api/v1/pharmacy/medications/dispense`).
 8. Patient hides a visit with `PATCH /api/v1/patients/me/visits/{visit_id}/visibility`.
+
+## Local Staff Access
+
+Patients can create accounts from the frontend signup page. Staff roles use the same frontend
+login page, but their accounts should be provisioned separately.
+
+For local development, seed GP, specialist, lab, and pharmacy users with:
+
+```bash
+cd backend
+source .venv/bin/activate
+python -m app.tools.seed_staff_users
+```
+
+The seeding script prints each staff user's role, NHS ID, email, and password so those users can
+sign in at `http://localhost:8080/login`.
 
 ## Notes
 - Default DB is PostgreSQL async: `postgresql+asyncpg://postgres:postgres@localhost:5432/caresync`.

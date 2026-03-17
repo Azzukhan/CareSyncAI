@@ -141,6 +141,17 @@ export interface PharmacyMedicationsResponse {
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
 const ACCESS_TOKEN_KEY = "caresync_access_token";
 const USER_KEY = "caresync_user";
+export const AUTH_UNAUTHORIZED_EVENT = "caresync:unauthorized";
+
+export class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
 
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers ?? {});
@@ -161,7 +172,15 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
     } catch {
       // Ignore JSON parse errors.
     }
-    throw new Error(message);
+
+    if (response.status === 401) {
+      clearAuthSession();
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new Event(AUTH_UNAUTHORIZED_EVENT));
+      }
+    }
+
+    throw new ApiError(response.status, message);
   }
 
   return (await response.json()) as T;
@@ -960,6 +979,18 @@ export async function starAgenticConversation(
     method: "PATCH",
     headers: authHeaders(token),
     body: JSON.stringify({ starred }),
+  });
+}
+
+export async function updateAgenticConversation(
+  token: string,
+  conversationId: string,
+  input: { title: string },
+): Promise<ConversationSummary> {
+  return apiRequest<ConversationSummary>(`/api/v1/agentic/conversations/${conversationId}`, {
+    method: "PATCH",
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
   });
 }
 

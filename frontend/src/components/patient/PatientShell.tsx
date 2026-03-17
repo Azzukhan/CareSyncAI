@@ -24,6 +24,14 @@ import {
 import type { LucideIcon } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import {
+  workspaceAccentPanelClassName,
+  workspaceEyebrowClassName,
+  workspaceHeaderIconClassName,
+  workspaceSecondaryButtonClassName,
+  workspaceSelectableClassName,
+  workspaceShellBackgroundClassName,
+} from "@/components/workspace/workspaceTheme";
 import { cn } from "@/lib/utils";
 
 interface PatientShellProps {
@@ -112,8 +120,26 @@ export default function PatientShell({
     }
   }, [historyRouteActive]);
 
+  const inactiveNavClassName = workspaceSelectableClassName;
+
   return (
-    <div className="caresync-patient-theme dark min-h-screen overflow-x-hidden bg-[radial-gradient(circle_at_top_right,rgba(16,185,129,0.18),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(14,165,233,0.16),transparent_34%),linear-gradient(180deg,#08111f_0%,#0f172a_55%,#08111f_100%)] text-slate-100">
+    <div
+      className={workspaceShellBackgroundClassName.replace(
+        "caresync-workspace-theme",
+        "caresync-patient-theme relative",
+      )}
+    >
+      <div
+        className="pointer-events-none absolute inset-0 opacity-40"
+        style={{
+          backgroundImage:
+            "linear-gradient(rgba(148,163,184,0.08) 1px, transparent 1px), linear-gradient(90deg, rgba(148,163,184,0.08) 1px, transparent 1px)",
+          backgroundSize: "60px 60px",
+        }}
+      />
+      <div className="theme-glow-blob pointer-events-none absolute left-1/2 top-[16%] h-72 w-72 -translate-x-1/2 rounded-full bg-amber-400/10 blur-[140px]" />
+      <div className="theme-glow-blob pointer-events-none absolute bottom-[-5rem] left-[16%] h-72 w-72 rounded-full bg-cyan-400/10 blur-[150px]" />
+      <div className="relative">
       <header className="sticky top-0 z-40 border-b border-white/10 bg-slate-950/70 backdrop-blur-xl">
         <div
           className={cn(
@@ -142,8 +168,8 @@ export default function PatientShell({
               </Button>
             ) : null}
             <div className="flex min-w-0 items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 via-cyan-400 to-sky-500 shadow-[0_10px_30px_rgba(14,165,233,0.25)]">
-                <Heart className="h-5 w-5 text-slate-950" />
+              <div className={workspaceHeaderIconClassName}>
+                <Heart className="h-5 w-5 text-amber-300" />
               </div>
               <div className="min-w-0">
                 <p className="truncate font-semibold tracking-tight">CareSyncAI</p>
@@ -196,7 +222,7 @@ export default function PatientShell({
               <Button
                 variant="ghost"
                 size="icon"
-                className="rounded-xl border border-white/10 bg-white/[0.03] text-slate-200 hover:bg-white/10"
+                className={cn("rounded-xl", workspaceSecondaryButtonClassName)}
                 onClick={() => setSidebarCollapsed((current) => !current)}
                 title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
               >
@@ -220,8 +246,8 @@ export default function PatientShell({
                       "flex items-center rounded-2xl border px-3 py-3 text-sm transition-colors",
                       sidebarCollapsed ? "justify-center" : "gap-3",
                       isActive
-                        ? "border-cyan-400/40 bg-cyan-400/10 text-white"
-                        : "border-white/5 bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white",
+                        ? workspaceAccentPanelClassName
+                        : inactiveNavClassName,
                     )
                   }
                 >
@@ -248,8 +274,8 @@ export default function PatientShell({
                   "flex w-full items-center rounded-2xl border px-3 py-3 text-left text-sm transition-colors",
                   sidebarCollapsed ? "justify-center" : "justify-between",
                   aiRouteActive || aiOpen
-                    ? "border-cyan-400/30 bg-cyan-400/10 text-white"
-                    : "border-white/5 bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white",
+                    ? workspaceAccentPanelClassName
+                    : inactiveNavClassName,
                 )}
               >
                 <span className={cn("flex items-center", sidebarCollapsed ? "justify-center" : "gap-3")}>
@@ -275,8 +301,8 @@ export default function PatientShell({
                         cn(
                           "flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm transition-colors",
                           isActive
-                            ? "border-cyan-400/40 bg-cyan-400/10 text-white"
-                            : "border-white/5 bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white",
+                            ? workspaceAccentPanelClassName
+                            : inactiveNavClassName,
                         )
                       }
                     >
@@ -305,8 +331,8 @@ export default function PatientShell({
                   "flex w-full items-center rounded-2xl border px-3 py-3 text-left text-sm transition-colors",
                   sidebarCollapsed ? "justify-center" : "justify-between",
                   calendarRouteActive || calendarOpen
-                    ? "border-cyan-400/30 bg-cyan-400/10 text-white"
-                    : "border-white/5 bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white",
+                    ? workspaceAccentPanelClassName
+                    : inactiveNavClassName,
                 )}
               >
                 <span className={cn("flex items-center", sidebarCollapsed ? "justify-center" : "gap-3")}>
@@ -332,8 +358,8 @@ export default function PatientShell({
                         cn(
                           "flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm transition-colors",
                           isActive
-                            ? "border-cyan-400/40 bg-cyan-400/10 text-white"
-                            : "border-white/5 bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white",
+                            ? workspaceAccentPanelClassName
+                            : inactiveNavClassName,
                         )
                       }
                     >
@@ -362,8 +388,8 @@ export default function PatientShell({
                   "flex w-full items-center rounded-2xl border px-3 py-3 text-left text-sm transition-colors",
                   sidebarCollapsed ? "justify-center" : "justify-between",
                   historyRouteActive || historyOpen
-                    ? "border-cyan-400/30 bg-cyan-400/10 text-white"
-                    : "border-white/5 bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white",
+                    ? workspaceAccentPanelClassName
+                    : inactiveNavClassName,
                 )}
               >
                 <span className={cn("flex items-center", sidebarCollapsed ? "justify-center" : "gap-3")}>
@@ -389,8 +415,8 @@ export default function PatientShell({
                         cn(
                           "flex items-center gap-3 rounded-2xl border px-3 py-3 text-sm transition-colors",
                           isActive
-                            ? "border-cyan-400/40 bg-cyan-400/10 text-white"
-                            : "border-white/5 bg-white/[0.03] text-slate-300 hover:border-white/10 hover:bg-white/[0.06] hover:text-white",
+                            ? workspaceAccentPanelClassName
+                            : inactiveNavClassName,
                         )
                       }
                     >
@@ -420,13 +446,14 @@ export default function PatientShell({
         >
           {!hideContentHeader ? (
             <div className="mb-5">
-              <p className="text-xs uppercase tracking-[0.24em] text-cyan-300/80">Patient Workspace</p>
+              <p className={workspaceEyebrowClassName}>Patient Workspace</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h1>
               {subtitle ? <p className="mt-2 max-w-3xl text-sm text-slate-400">{subtitle}</p> : null}
             </div>
           ) : null}
           {children}
         </main>
+      </div>
       </div>
     </div>
   );

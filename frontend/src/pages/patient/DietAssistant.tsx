@@ -7,7 +7,6 @@ export default function DietAssistant() {
       planType="diet"
       title="CareSyncAI Diet"
       subtitle="Improve your meal plan using allergies, appetite, skipped meals, cravings, schedule timing, and adherence feedback."
-      accentClass="text-orange-300"
       quickPrompts={[
         "Create a simpler meal plan for this week",
         "I skipped breakfast yesterday and got hungry later",

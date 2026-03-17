@@ -1,3 +1,4 @@
+import json
 from datetime import date
 
 import pytest
@@ -5,14 +6,17 @@ from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.base import Base
-from app.models import CareAgentType, CarePlanType, User, UserRole
-from app.modules.agentic.llm import agentic_llm_service
+from app.models import CareAgentType, CarePlanType, LabOrder, LabReport, User, UserRole
+from app.modules.agentic.llm import MedicalStructuredResponse, agentic_llm_service
 from app.modules.agentic.schemas import AgentQueryRequest, CarePlanCheckinCreateRequest
 from app.modules.agentic.service import (
     create_checkin_response,
+    delete_conversation_response,
     get_conversation_detail_response,
     list_plans_response,
+    list_conversations_response,
     query_agent_response,
+    update_conversation_title_response,
 )
 
 
@@ -127,3 +131,124 @@ async def test_checkin_updates_yesterday_summary(db_session: AsyncSession) -> No
     returned_item = next(item for item in plans[0].items if item.id == tracked_item.id)
     assert returned_item.latest_checkin is not None
     assert returned_item.latest_checkin.checkin_date == checkin_date
+
+
+@pytest.mark.asyncio
+async def test_conversation_title_can_be_updated(db_session: AsyncSession) -> None:
+    user = await create_user(db_session, "patient5@example.com")
+    response = await query_agent_response(
+        db_session,
+        user=user,
+        payload=AgentQueryRequest(prompt="Help me review my asthma management", agent=CareAgentType.MEDICAL),
+    )
+
+    updated = await update_conversation_title_response(
+        db_session,
+        user=user,
+        conversation_id=response.conversation_id,
+        title="Asthma weekly review",
+    )
+
+    assert updated.title == "Asthma weekly review"
+
+    detail = await get_conversation_detail_response(
+        db_session,
+        user=user,
+        conversation_id=response.conversation_id,
+    )
+    assert detail.title == "Asthma weekly review"
+
+
+@pytest.mark.asyncio
+async def test_soft_deleted_conversation_is_hidden(db_session: AsyncSession) -> None:
+    user = await create_user(db_session, "patient6@example.com")
+    response = await query_agent_response(
+        db_session,
+        user=user,
+        payload=AgentQueryRequest(prompt="Build me a better sleep routine", agent=CareAgentType.MEDICAL),
+    )
+
+    await delete_conversation_response(
+        db_session,
+        user=user,
+        conversation_id=response.conversation_id,
+    )
+
+    conversations = await list_conversations_response(
+        db_session,
+        user=user,
+        agent=CareAgentType.MEDICAL,
+        limit=20,
+        offset=0,
+    )
+    assert conversations == []
+
+    with pytest.raises(HTTPException):
+        await get_conversation_detail_response(
+            db_session,
+            user=user,
+            conversation_id=response.conversation_id,
+        )
+
+
+@pytest.mark.asyncio
+async def test_medical_agent_context_includes_recent_lab_reports(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patient = await create_user(db_session, "patient7@example.com")
+    requester = await create_user(db_session, "gp7@example.com")
+    order = LabOrder(
+        patient_user_id=patient.id,
+        requested_by_user_id=requester.id,
+        test_description="Full blood count",
+        status="completed",
+    )
+    db_session.add(order)
+    await db_session.commit()
+    await db_session.refresh(order)
+
+    report = LabReport(
+        lab_order_id=order.id,
+        uploaded_by_user_id=requester.id,
+        report_summary="Hemoglobin slightly low. Ferritin borderline low. White cell count normal.",
+        file_url="/media/labs/fbc.pdf",
+    )
+    db_session.add(report)
+    await db_session.commit()
+
+    captured_snapshot: dict[str, object] = {}
+
+    async def fake_run_medical(
+        *,
+        user_id: str,
+        prompt: str,
+        context_messages: list[dict[str, str]],
+        context_snapshot: str,
+    ) -> MedicalStructuredResponse:
+        captured_snapshot.update(json.loads(context_snapshot))
+        return MedicalStructuredResponse(
+            summary="Reviewed the available lab reports.",
+            highlights=["Lab report context received."],
+            suggested_follow_ups=[],
+        )
+
+    monkeypatch.setattr(agentic_llm_service, "run_medical", fake_run_medical)
+
+    await query_agent_response(
+        db_session,
+        user=patient,
+        payload=AgentQueryRequest(
+            prompt="Can you analyze my lab reports and tell me what to improve?",
+            agent=CareAgentType.MEDICAL,
+        ),
+    )
+
+    assert "lab_reports" in captured_snapshot
+    lab_reports = captured_snapshot["lab_reports"]
+    assert isinstance(lab_reports, list)
+    assert len(lab_reports) == 1
+    report_payload = lab_reports[0]
+    assert isinstance(report_payload, dict)
+    assert report_payload["test_description"] == "Full blood count"
+    assert report_payload["status"] == "completed"
+    assert "Hemoglobin slightly low" in report_payload["report_summary"]

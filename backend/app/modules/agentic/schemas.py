@@ -206,6 +206,16 @@ class AgentConversationStarRequest(BaseModel):
     starred: bool
 
 
+class AgentConversationUpdateRequest(BaseModel):
+    title: str
+
+    @model_validator(mode="after")
+    def validate_title(self) -> "AgentConversationUpdateRequest":
+        if not self.title.strip():
+            raise ValueError("Title cannot be empty.")
+        return self
+
+
 class AgentMutationResponse(BaseModel):
     success: bool = True
 

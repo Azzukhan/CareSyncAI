@@ -183,7 +183,7 @@ function drawWrappedText(
 }
 
 function createQrMatrix(payload: string): QrMatrix {
-  const qr = QRCodeRenderer.create(payload, { errorCorrectionLevel: "H", margin: 0 });
+  const qr = QRCodeRenderer.create(payload, { errorCorrectionLevel: "H" });
   return {
     size: qr.modules.size,
     data: Array.from(qr.modules.data as Iterable<boolean>),
@@ -459,8 +459,9 @@ function drawFrontCard(
   const qrSectionX = width - rightSectionWidth;
   const qrFrameSize = px(132);
   const qrCodeSize = px(108);
-  const qrFrameX = qrSectionX + (rightSectionWidth - qrFrameSize) / 2;
-  const qrFrameY = px(44);
+  const qrFrameRightInset = px(18);
+  const qrFrameX = width - qrFrameRightInset - qrFrameSize;
+  const qrFrameY = (height - qrFrameSize) / 2;
   const qrCodeX = qrFrameX + (qrFrameSize - qrCodeSize) / 2;
   const qrCodeY = qrFrameY + (qrFrameSize - qrCodeSize) / 2;
   const labelWidth = px(112);

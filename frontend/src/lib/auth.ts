@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
+  AUTH_UNAUTHORIZED_EVENT,
   clearAuthSession,
   getStoredAccessToken,
   getStoredUser,
@@ -28,6 +29,16 @@ export function useRequiredAuth(requiredRole: UserRole): RequiredAuthState {
       navigate("/login", { replace: true });
     }
   }, [navigate, requiredRole, token, user]);
+
+  useEffect(() => {
+    const handleUnauthorized = () => {
+      clearAuthSession();
+      navigate("/login", { replace: true });
+    };
+
+    window.addEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+    return () => window.removeEventListener(AUTH_UNAUTHORIZED_EVENT, handleUnauthorized);
+  }, [navigate]);
 
   return {
     isAuthenticated,

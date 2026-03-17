@@ -66,6 +66,7 @@ class AgenticConversation(Base):
     agent: Mapped[CareAgentType] = mapped_column(Enum(CareAgentType), index=True)
     title: Mapped[str] = mapped_column(String(255))
     starred: Mapped[bool] = mapped_column(Boolean, default=False)
+    is_deleted: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True

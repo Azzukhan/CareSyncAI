@@ -14,6 +14,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  workspaceAccentPanelClassName,
+  workspaceAccentSoftBadgeClassName,
+  workspaceCardClassName,
+  workspacePrimaryButtonClassName,
+  workspaceSecondaryButtonClassName,
+} from "@/components/workspace/workspaceTheme";
 import { type CarePlanType, getAgenticCalendar } from "@/lib/api";
 import { useRequiredAuth } from "@/lib/auth";
 import { cn, formatDate } from "@/lib/utils";
@@ -84,7 +91,7 @@ export default function AgentCalendarPage({
       workspaceMode
     >
       <div className="grid h-full gap-3 p-4 xl:grid-cols-[minmax(0,1fr)_20rem]">
-        <Card className="flex h-full min-h-0 flex-col border-white/10 bg-slate-950/40">
+        <Card className={cn("flex h-full min-h-0 flex-col", workspaceCardClassName)}>
           <CardHeader>
             <div className="flex items-center justify-between gap-3">
               <CardTitle className="text-base">{monthLabel}</CardTitle>
@@ -92,7 +99,7 @@ export default function AgentCalendarPage({
                 <Button
                   size="icon"
                   variant="outline"
-                  className="border-white/10 bg-white/5"
+                  className={workspaceSecondaryButtonClassName}
                   onClick={() =>
                     setCurrentDate((value) => new Date(value.getFullYear(), value.getMonth() - 1, 1))
                   }
@@ -102,7 +109,7 @@ export default function AgentCalendarPage({
                 <Button
                   size="icon"
                   variant="outline"
-                  className="border-white/10 bg-white/5"
+                  className={workspaceSecondaryButtonClassName}
                   onClick={() =>
                     setCurrentDate((value) => new Date(value.getFullYear(), value.getMonth() + 1, 1))
                   }
@@ -140,7 +147,7 @@ export default function AgentCalendarPage({
                         className={cn(
                           "min-h-[94px] rounded-2xl border p-2 text-left transition-colors",
                           isSelected
-                            ? "border-cyan-400/40 bg-cyan-400/10"
+                            ? workspaceAccentPanelClassName
                             : "border-white/10 bg-white/[0.03] hover:bg-white/[0.06]",
                           !isCurrentMonth && "opacity-40",
                         )}
@@ -148,7 +155,12 @@ export default function AgentCalendarPage({
                         <div className="flex items-center justify-between">
                           <span className="text-sm font-medium">{day.getDate()}</span>
                           {isToday ? (
-                            <span className="rounded-full bg-cyan-400/20 px-2 py-0.5 text-[10px] text-cyan-200">
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 text-[10px]",
+                                workspaceAccentSoftBadgeClassName,
+                              )}
+                            >
                               Today
                             </span>
                           ) : null}
@@ -176,7 +188,7 @@ export default function AgentCalendarPage({
         </Card>
 
         <div className="flex min-h-0 flex-col gap-3">
-          <Card className="flex min-h-0 flex-1 flex-col border-white/10 bg-slate-950/40">
+          <Card className={cn("flex min-h-0 flex-1 flex-col", workspaceCardClassName)}>
             <CardHeader>
               <CardTitle className="text-base">Selected Day</CardTitle>
             </CardHeader>
@@ -229,13 +241,13 @@ export default function AgentCalendarPage({
             </CardContent>
           </Card>
 
-          <Card className="border-white/10 bg-slate-950/40">
+          <Card className={workspaceCardClassName}>
             <CardHeader>
               <CardTitle className="text-base">Assistant Shortcut</CardTitle>
             </CardHeader>
             <CardContent>
               <Link to={`/dashboard/patient/ai/${planType}`}>
-                <Button className="w-full">
+                <Button className={cn("w-full", workspacePrimaryButtonClassName)}>
                   <MessageSquareHeart className="mr-2 h-4 w-4" />
                   Open {planType} assistant
                 </Button>

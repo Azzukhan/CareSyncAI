@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -10,10 +9,19 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import {
-  Heart, LogOut, User, Shield, FileText, Pill, FlaskConical,
+  User, Shield, FileText, Pill, FlaskConical,
   Send, Plus, AlertCircle, Stethoscope
 } from "lucide-react";
 import QRScannerModal from "@/components/QRScannerModal";
+import StaffPortalShell, {
+  staffCardClassName,
+  staffInputClassName,
+  staffPrimaryButtonClassName,
+  staffSecondaryButtonClassName,
+  staffTabListClassName,
+  staffTabTriggerClassName,
+  staffTextareaClassName,
+} from "@/components/workspace/StaffPortalShell";
 import { useToast } from "@/hooks/use-toast";
 import {
   createSpecialistLabOrder,
@@ -129,34 +137,17 @@ export default function SpecialistDashboard() {
   const gpNotes = patientQuery.data?.visits.filter((visit) => visit.provider_role === "gp") ?? [];
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 border-b bg-card/80 backdrop-blur-lg">
-        <div className="container flex h-14 items-center justify-between">
-          <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-lg gradient-primary flex items-center justify-center">
-              <Heart className="h-4 w-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-sm">CareSync</span>
-            <Badge variant="secondary" className="ml-2">Specialist Portal</Badge>
-          </Link>
-          <div className="flex items-center gap-3">
-            <span className="text-sm text-muted-foreground hidden sm:block">{user?.full_name}</span>
-            <Button variant="ghost" size="icon" onClick={logout}>
-              <LogOut className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-      </header>
-
-      <div className="container py-6 space-y-6">
+    <StaffPortalShell portalLabel="Specialist Portal" userName={user?.full_name} onLogout={logout}>
+      <div className="space-y-6">
         {!selectedPatient ? (
-          <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-6">
-            <div className="h-24 w-24 rounded-3xl gradient-primary flex items-center justify-center">
-              <Shield className="h-12 w-12 text-primary-foreground" />
+          <div className="flex min-h-[60vh] flex-col items-center justify-center space-y-6 rounded-[30px] border border-white/10 bg-slate-950/45 p-8 text-center shadow-[0_24px_70px_rgba(2,6,23,0.26)]">
+            <div className="flex h-24 w-24 items-center justify-center rounded-[28px] border border-amber-400/20 bg-amber-400/10 text-amber-300">
+              <Shield className="h-12 w-12" />
             </div>
             <div className="text-center">
-              <h1 className="text-2xl font-bold mb-2">Specialist Portal</h1>
-              <p className="text-muted-foreground max-w-md">
+              <p className="text-xs uppercase tracking-[0.24em] text-amber-300/80">Specialist Workspace</p>
+              <h1 className="mb-2 mt-2 text-3xl font-bold tracking-tight text-slate-100">Specialist Portal</h1>
+              <p className="max-w-md text-slate-400">
                 Scan a patient QR payload or enter their NHS ID to review live GP notes,
                 medication history, and lab reports.
               </p>
@@ -164,7 +155,7 @@ export default function SpecialistDashboard() {
             <QRScannerModal
               onPatientFound={setSelectedPatient}
               trigger={
-                <Button size="lg" className="gradient-primary border-0 gap-2">
+                <Button size="lg" className={staffPrimaryButtonClassName}>
                   <Stethoscope className="h-5 w-5" /> Find Patient
                 </Button>
               }
@@ -172,48 +163,48 @@ export default function SpecialistDashboard() {
           </div>
         ) : (
           <>
-            <Button variant="ghost" onClick={() => setSelectedPatient(null)}>← Back</Button>
+            <Button variant="outline" className={staffSecondaryButtonClassName} onClick={() => setSelectedPatient(null)}>← Back</Button>
 
             {patientQuery.isLoading ? (
-              <Card>
+              <Card className={staffCardClassName}>
                 <CardContent className="pt-6">
-                  <div className="h-24 rounded bg-muted animate-pulse" />
+                  <div className="h-24 rounded-2xl bg-white/[0.04] animate-pulse" />
                 </CardContent>
               </Card>
             ) : patientQuery.isError || !patient ? (
-              <Card>
+              <Card className={staffCardClassName}>
                 <CardContent className="pt-6 space-y-4">
-                  <p className="font-semibold">Unable to load patient record.</p>
-                  <p className="text-sm text-muted-foreground">
+                  <p className="font-semibold text-slate-100">Unable to load patient record.</p>
+                  <p className="text-sm text-slate-400">
                     {patientQuery.error instanceof Error ? patientQuery.error.message : "Try another patient."}
                   </p>
                 </CardContent>
               </Card>
             ) : (
               <>
-                <Card>
+                <Card className={staffCardClassName}>
                   <CardContent className="pt-6">
                     <div className="flex items-start gap-4">
-                      <div className="h-14 w-14 rounded-2xl gradient-primary flex items-center justify-center shrink-0">
-                        <User className="h-7 w-7 text-primary-foreground" />
+                      <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-3xl border border-amber-400/20 bg-amber-400/10 text-amber-300">
+                        <User className="h-7 w-7" />
                       </div>
                       <div>
-                        <h2 className="text-xl font-bold">{patient.full_name}</h2>
-                        <p className="text-sm text-muted-foreground">
+                        <h2 className="text-xl font-bold text-slate-100">{patient.full_name}</h2>
+                        <p className="text-sm text-slate-400">
                           {patient.nhs_healthcare_id}
                           {patient.date_of_birth ? ` • DOB: ${patient.date_of_birth}` : ""}
                         </p>
                         <div className="flex flex-wrap gap-2 mt-2">
                           {patient.blood_group && (
-                            <Badge variant="secondary">Blood: {patient.blood_group}</Badge>
+                            <Badge className="border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10">Blood: {patient.blood_group}</Badge>
                           )}
                           {patient.allergies.map((allergy) => (
-                            <Badge key={allergy} variant="destructive" className="gap-1">
+                            <Badge key={allergy} className="gap-1 bg-rose-500/10 text-rose-200 hover:bg-rose-500/10">
                               <AlertCircle className="h-3 w-3" /> {allergy}
                             </Badge>
                           ))}
                           {patient.chronic_conditions.map((condition) => (
-                            <Badge key={condition} variant="outline">{condition}</Badge>
+                            <Badge key={condition} variant="outline" className="border-white/10 text-slate-300">{condition}</Badge>
                           ))}
                         </div>
                       </div>
@@ -222,46 +213,46 @@ export default function SpecialistDashboard() {
                 </Card>
 
                 <Tabs defaultValue="gp-notes">
-                  <TabsList>
-                    <TabsTrigger value="gp-notes" className="gap-1">
+                  <TabsList className={staffTabListClassName}>
+                    <TabsTrigger value="gp-notes" className={staffTabTriggerClassName}>
                       <Stethoscope className="h-3 w-3" /> GP Notes
                     </TabsTrigger>
-                    <TabsTrigger value="history" className="gap-1">
+                    <TabsTrigger value="history" className={staffTabTriggerClassName}>
                       <FileText className="h-3 w-3" /> Full History
                     </TabsTrigger>
-                    <TabsTrigger value="labs" className="gap-1">
+                    <TabsTrigger value="labs" className={staffTabTriggerClassName}>
                       <FlaskConical className="h-3 w-3" /> Lab Reports
                     </TabsTrigger>
-                    <TabsTrigger value="refer" className="gap-1">
+                    <TabsTrigger value="refer" className={staffTabTriggerClassName}>
                       <Send className="h-3 w-3" /> Order Lab Work
                     </TabsTrigger>
-                    <TabsTrigger value="prescribe" className="gap-1">
+                    <TabsTrigger value="prescribe" className={staffTabTriggerClassName}>
                       <Pill className="h-3 w-3" /> Prescribe
                     </TabsTrigger>
                   </TabsList>
 
                   <TabsContent value="gp-notes" className="space-y-3 mt-4">
-                    <h3 className="font-semibold text-muted-foreground text-sm">
+                    <h3 className="text-sm font-semibold text-slate-400">
                       GP Notes and Referral Context
                     </h3>
                     {gpNotes.length === 0 ? (
-                      <Card>
-                        <CardContent className="pt-6 text-sm text-muted-foreground">
+                      <Card className={staffCardClassName}>
+                        <CardContent className="pt-6 text-sm text-slate-400">
                           No GP notes are available for this patient yet.
                         </CardContent>
                       </Card>
                     ) : (
                       gpNotes.map((visit) => (
-                        <Card key={visit.id}>
+                        <Card key={visit.id} className={staffCardClassName}>
                           <CardContent className="pt-4 pb-4">
                             <div className="flex items-center gap-2 mb-2">
-                              <Badge>GP Visit</Badge>
-                              <span className="text-xs text-muted-foreground">
+                              <Badge className="border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10">GP Visit</Badge>
+                              <span className="text-xs text-slate-500">
                                 {formatDate(visit.created_at)}
                               </span>
                             </div>
-                            <p className="font-medium text-sm">{visit.provider_name}</p>
-                            <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                            <p className="text-sm font-medium text-slate-100">{visit.provider_name}</p>
+                            <p className="mt-1 whitespace-pre-wrap text-sm text-slate-300">
                               {visit.notes}
                             </p>
                           </CardContent>
@@ -272,26 +263,26 @@ export default function SpecialistDashboard() {
 
                   <TabsContent value="history" className="space-y-3 mt-4">
                     {patientQuery.data.visits.map((visit) => (
-                      <Card key={visit.id}>
+                      <Card key={visit.id} className={staffCardClassName}>
                         <CardContent className="pt-4 pb-4">
                             <div className="flex items-center gap-2 mb-1">
-                              <Badge variant={visit.record_type === "gp_visit" ? "default" : "secondary"}>
+                              <Badge className={visit.record_type === "gp_visit" ? "border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10" : "border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10"}>
                                 {visitLabel(visit.record_type, visit.provider_role)}
                               </Badge>
-                              <span className="text-xs text-muted-foreground">
+                              <span className="text-xs text-slate-500">
                                 {formatDate(visit.created_at)}
                             </span>
                           </div>
-                          <p className="font-medium text-sm">{visit.provider_name}</p>
-                          <p className="text-sm text-muted-foreground mt-1 whitespace-pre-wrap">
+                          <p className="text-sm font-medium text-slate-100">{visit.provider_name}</p>
+                          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-300">
                             {visit.notes}
                           </p>
                         </CardContent>
                       </Card>
                     ))}
                     {!patientQuery.data.visits.length && (
-                      <Card>
-                        <CardContent className="pt-6 text-sm text-muted-foreground">
+                      <Card className={staffCardClassName}>
+                        <CardContent className="pt-6 text-sm text-slate-400">
                           No clinical history is visible for this patient yet.
                         </CardContent>
                       </Card>
@@ -300,28 +291,28 @@ export default function SpecialistDashboard() {
 
                   <TabsContent value="labs" className="space-y-3 mt-4">
                     {patientQuery.data.lab_reports.map((report) => (
-                      <Card key={report.id}>
+                      <Card key={report.id} className={staffCardClassName}>
                         <CardHeader className="pb-2">
                           <div className="flex justify-between items-center">
-                            <CardTitle className="text-base">{report.test_description}</CardTitle>
-                            <Badge variant={report.status === "completed" ? "default" : "secondary"}>
+                            <CardTitle className="text-base text-slate-100">{report.test_description}</CardTitle>
+                              <Badge className={report.status === "completed" ? "border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10" : "border-amber-400/20 bg-amber-400/10 text-amber-100 hover:bg-amber-400/10"}>
                               {formatRoleLabel(report.status)}
                             </Badge>
                           </div>
-                          <p className="text-xs text-muted-foreground">
+                          <p className="text-xs text-slate-500">
                             {formatDate(report.created_at)} • Ordered by {report.ordered_by_name}
                           </p>
                         </CardHeader>
                         <CardContent>
-                          <p className="text-sm text-muted-foreground whitespace-pre-wrap">
+                          <p className="whitespace-pre-wrap text-sm text-slate-300">
                             {report.report_summary}
                           </p>
                         </CardContent>
                       </Card>
                     ))}
                     {!patientQuery.data.lab_reports.length && (
-                      <Card>
-                        <CardContent className="pt-6 text-sm text-muted-foreground">
+                      <Card className={staffCardClassName}>
+                        <CardContent className="pt-6 text-sm text-slate-400">
                           No lab reports are available yet.
                         </CardContent>
                       </Card>
@@ -329,19 +320,19 @@ export default function SpecialistDashboard() {
                   </TabsContent>
 
                   <TabsContent value="refer" className="mt-4">
-                    <Card>
+                    <Card className={staffCardClassName}>
                       <CardContent className="pt-6 space-y-4">
                         <div className="space-y-2">
-                          <Label>Lab Test Request</Label>
+                          <Label className="text-slate-200">Lab Test Request</Label>
                           <Textarea
                             placeholder="Describe the diagnostics or tests required..."
                             value={labOrderNotes}
                             onChange={(e) => setLabOrderNotes(e.target.value)}
-                            className="min-h-[120px]"
+                            className={staffTextareaClassName}
                           />
                         </div>
                         <Button
-                          className="gradient-primary border-0 gap-2"
+                          className={staffPrimaryButtonClassName}
                           onClick={() => labOrderMutation.mutate()}
                           disabled={!labOrderNotes.trim() || labOrderMutation.isPending}
                         >
@@ -350,19 +341,19 @@ export default function SpecialistDashboard() {
                         </Button>
                       </CardContent>
                     </Card>
-                    <Card className="mt-4">
+                    <Card className={`mt-4 ${staffCardClassName}`}>
                       <CardContent className="pt-6 space-y-4">
                         <div className="space-y-2">
-                          <Label>Specialist Notes</Label>
+                          <Label className="text-slate-200">Specialist Notes</Label>
                           <Textarea
                             placeholder="Add your specialist assessment to the patient record..."
                             value={notes}
                             onChange={(e) => setNotes(e.target.value)}
-                            className="min-h-[140px]"
+                            className={`${staffTextareaClassName} min-h-[140px]`}
                           />
                         </div>
                         <Button
-                          className="gradient-primary border-0 gap-2"
+                          className={staffPrimaryButtonClassName}
                           onClick={() => noteMutation.mutate()}
                           disabled={!notes.trim() || noteMutation.isPending}
                         >
@@ -374,54 +365,56 @@ export default function SpecialistDashboard() {
                   </TabsContent>
 
                   <TabsContent value="prescribe" className="mt-4">
-                    <Card>
+                    <Card className={staffCardClassName}>
                       <CardHeader>
-                        <CardTitle className="text-lg">Current Medications</CardTitle>
+                        <CardTitle className="text-lg text-slate-100">Current Medications</CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-3">
                         {patientQuery.data.medications.map((medication) => (
                           <div
                             key={medication.id}
-                            className="flex justify-between items-center p-3 rounded-lg border"
+                            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.03] p-3"
                           >
                             <div>
-                              <p className="font-medium text-sm">{medication.medicine_name}</p>
-                              <p className="text-xs text-muted-foreground">
+                              <p className="text-sm font-medium text-slate-100">{medication.medicine_name}</p>
+                              <p className="text-xs text-slate-400">
                                 {medication.dosage_instruction}
                               </p>
                             </div>
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="border-white/10 text-xs text-slate-300">
                               {formatRoleLabel(medication.status)}
                             </Badge>
                           </div>
                         ))}
                         {!patientQuery.data.medications.length && (
-                          <p className="text-sm text-muted-foreground">
+                          <p className="text-sm text-slate-400">
                             No medications recorded for this patient yet.
                           </p>
                         )}
                         <Separator />
-                        <h4 className="font-semibold text-sm pt-2">Add New Medication</h4>
+                        <h4 className="pt-2 text-sm font-semibold text-slate-100">Add New Medication</h4>
                         <div className="grid grid-cols-2 gap-4">
                           <div className="space-y-2">
-                            <Label>Name</Label>
+                            <Label className="text-slate-200">Name</Label>
                             <Input
                               placeholder="e.g. Prednisolone"
+                              className={staffInputClassName}
                               value={newMedName}
                               onChange={(e) => setNewMedName(e.target.value)}
                             />
                           </div>
                           <div className="space-y-2">
-                            <Label>Dose</Label>
+                            <Label className="text-slate-200">Dose</Label>
                             <Input
                               placeholder="e.g. 5mg, once daily"
+                              className={staffInputClassName}
                               value={newMedDose}
                               onChange={(e) => setNewMedDose(e.target.value)}
                             />
                           </div>
                         </div>
                         <Button
-                          className="gradient-primary border-0 gap-2"
+                          className={staffPrimaryButtonClassName}
                           onClick={() => medicationMutation.mutate()}
                           disabled={!newMedName.trim() || !newMedDose.trim() || medicationMutation.isPending}
                         >
@@ -437,6 +430,6 @@ export default function SpecialistDashboard() {
           </>
         )}
       </div>
-    </div>
+    </StaffPortalShell>
   );
 }
