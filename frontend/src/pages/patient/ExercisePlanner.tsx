@@ -10,6 +10,7 @@ import {
   Info, AlertTriangle, TrendingUp
 } from "lucide-react";
 import { generateExercisePlan, syncExerciseToCalendar, type ExerciseSchedule } from "@/lib/api";
+import { workspacePrimaryButtonClassName } from "@/components/workspace/workspaceTheme";
 import { useRequiredAuth } from "@/lib/auth";
 import { useToast } from "@/hooks/use-toast";
 
@@ -92,8 +93,8 @@ export default function ExercisePlanner() {
             </Button>
           </Link>
           <div className="flex items-center gap-3">
-            <div className="h-12 w-12 rounded-xl gradient-primary flex items-center justify-center shadow-lg">
-              <Dumbbell className="h-6 w-6 text-primary-foreground" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-amber-400/20 bg-amber-400/10 shadow-lg">
+              <Dumbbell className="h-6 w-6 text-amber-300" />
             </div>
             <div>
               <h1 className="text-2xl font-bold tracking-tight">Exercise Planner</h1>
@@ -200,7 +201,7 @@ export default function ExercisePlanner() {
               </div>
 
               <Button 
-                className="w-full mt-4 gradient-primary"
+                className={`mt-4 w-full ${workspacePrimaryButtonClassName}`}
                 onClick={() => generateMutation.mutate()}
                 disabled={generateMutation.isPending}
               >
@@ -218,8 +219,8 @@ export default function ExercisePlanner() {
               <CardContent className="p-8 flex flex-col items-center justify-center space-y-4">
                 <div className="relative h-20 w-20">
                   <div className="absolute inset-0 rounded-full border-4 border-primary/20 animate-ping"></div>
-                  <div className="absolute inset-2 rounded-full gradient-primary animate-pulse flex items-center justify-center">
-                    <Brain className="h-8 w-8 text-white animate-bounce" />
+                  <div className="absolute inset-2 flex items-center justify-center rounded-full border border-amber-400/20 bg-amber-400/10 animate-pulse">
+                    <Brain className="h-8 w-8 animate-bounce text-amber-300" />
                   </div>
                 </div>
                 <h3 className="text-lg font-medium bg-clip-text text-transparent bg-gradient-to-r from-primary to-accent animate-pulse">

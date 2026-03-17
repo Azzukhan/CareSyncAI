@@ -4,6 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { workspacePrimaryButtonClassName } from "@/components/workspace/workspaceTheme";
 import { Camera, ImageUp, QrCode, Search } from "lucide-react";
 
 interface QRScannerModalProps {
@@ -273,7 +274,7 @@ export default function QRScannerModal({ onPatientFound, trigger }: QRScannerMod
     <Dialog open={open} onOpenChange={(nextOpen) => (nextOpen ? setOpen(true) : closeAndReset())}>
       <DialogTrigger asChild>
         {trigger || (
-          <Button className="gradient-primary border-0 gap-2">
+          <Button className={`gap-2 ${workspacePrimaryButtonClassName}`}>
             <QrCode className="h-4 w-4" />
             Add Patient
           </Button>
@@ -351,7 +352,7 @@ export default function QRScannerModal({ onPatientFound, trigger }: QRScannerMod
               </div>
               <Button
                 onClick={handleQrPayloadSubmit}
-                className="w-full gradient-primary border-0"
+                className={`w-full ${workspacePrimaryButtonClassName}`}
                 disabled={!scanValue.trim()}
               >
                 Process QR Payload
@@ -370,7 +371,7 @@ export default function QRScannerModal({ onPatientFound, trigger }: QRScannerMod
             </div>
             <Button
               onClick={handleManualSearch}
-              className="w-full gradient-primary border-0"
+              className={`w-full ${workspacePrimaryButtonClassName}`}
               disabled={!nhsId.trim()}
             >
               Search Patient
