@@ -208,11 +208,24 @@ function ConversationPanels({
   const defaultValue: ChatPanelKey =
     message.preferredPanel === "plan" && visiblePanels.includes("plan") ? "plan" : "summary";
 
+  const summaryText = responseData.summary?.trim() || message.text;
   const summaryPanel = (
-    <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-4">
-      <div className="prose prose-invert max-w-none prose-p:leading-6 prose-li:leading-6 prose-strong:text-white">
-        <ReactMarkdown>{message.text}</ReactMarkdown>
-      </div>
+    <div className="space-y-4 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+      {summaryText ? (
+        <div className="prose prose-invert max-w-none prose-p:leading-6 prose-li:leading-6 prose-strong:text-white">
+          <ReactMarkdown>{summaryText}</ReactMarkdown>
+        </div>
+      ) : null}
+      {responseData.highlights.length ? (
+        <ul className="space-y-2 border-t border-white/10 pt-4 text-sm leading-6 text-slate-200">
+          {responseData.highlights.map((highlight) => (
+            <li key={highlight} className="flex items-start gap-2">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" />
+              <span>{highlight}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
     </div>
   );
 

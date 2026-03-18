@@ -61,9 +61,11 @@ const CARD_THEME = {
   cyanSoft: "rgba(110,215,229,0.12)",
   panel: "rgba(255,255,255,0.04)",
   panelStrong: "rgba(255,255,255,0.06)",
-  qrStroke: "#8bb8c0",
-  qrBackground: "#eef8f8",
-  qrInk: "#0f172a",
+  qrFrameStart: "#243446",
+  qrFrameEnd: "#1d2735",
+  qrStroke: "#3c5569",
+  qrBackground: "#1d2735",
+  qrInk: "#d3b14d",
   sheetTop: "#0a1019",
   sheetBottom: "#101a29",
 };
@@ -245,21 +247,48 @@ function drawFinderPattern(
   moduleSize: number,
   color: string,
 ): void {
-  const outerSize = moduleSize * 7;
-  const middleSize = moduleSize * 5;
-  const innerSize = moduleSize * 3;
+  const centerX = x + moduleSize * 3.5;
+  const centerY = y + moduleSize * 3.5;
 
-  roundedRect(context, x, y, outerSize, outerSize, moduleSize * 1.8);
+  context.beginPath();
+  context.arc(centerX, centerY, moduleSize * 3.5, 0, Math.PI * 2);
   context.fillStyle = color;
   context.fill();
 
-  roundedRect(context, x + moduleSize, y + moduleSize, middleSize, middleSize, moduleSize * 1.3);
+  context.beginPath();
+  context.arc(centerX, centerY, moduleSize * 2.5, 0, Math.PI * 2);
   context.fillStyle = CARD_THEME.qrBackground;
   context.fill();
 
-  roundedRect(context, x + moduleSize * 2, y + moduleSize * 2, innerSize, innerSize, moduleSize);
+  context.beginPath();
+  context.arc(centerX, centerY, moduleSize * 1.5, 0, Math.PI * 2);
   context.fillStyle = color;
   context.fill();
+}
+
+function drawHexagon(
+  context: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+): void {
+  const radius = size * 0.48;
+  const centerX = x + size / 2;
+  const centerY = y + size / 2;
+
+  context.beginPath();
+  for (let index = 0; index < 6; index += 1) {
+    const angle = (-Math.PI / 2) + (index * Math.PI) / 3;
+    const pointX = centerX + radius * Math.cos(angle);
+    const pointY = centerY + radius * Math.sin(angle);
+
+    if (index === 0) {
+      context.moveTo(pointX, pointY);
+      continue;
+    }
+    context.lineTo(pointX, pointY);
+  }
+  context.closePath();
 }
 
 function drawStyledQr(
@@ -273,7 +302,6 @@ function drawStyledQr(
   const quietZone = 2;
   const totalModules = matrix.size + quietZone * 2;
   const moduleSize = size / totalModules;
-  const moduleRadius = moduleSize * 0.44;
 
   context.save();
   context.translate(x, y);
@@ -313,12 +341,7 @@ function drawStyledQr(
       const px = (column + quietZone) * moduleSize;
       const py = (row + quietZone) * moduleSize;
 
-      roundedRectPerCorner(context, px, py, moduleSize, moduleSize, {
-        tl: !top && !left ? moduleRadius : 0,
-        tr: !top && !right ? moduleRadius : 0,
-        br: !bottom && !right ? moduleRadius : 0,
-        bl: !bottom && !left ? moduleRadius : 0,
-      });
+      drawHexagon(context, px, py, moduleSize);
       context.fill();
     }
   }
@@ -498,36 +521,12 @@ function drawFrontCard(
   const valueX = leftX + labelWidth + px(16);
   const valueWidth = qrSectionX - valueX - px(18);
 
-  roundedRect(
-    context,
-    qrFrameX - px(18),
-    qrFrameY - px(28),
-    qrFrameSize + px(36),
-    qrFrameSize + px(56),
-    px(24),
-  );
-  context.fillStyle = CARD_THEME.panel;
-  context.fill();
-  context.strokeStyle = "rgba(110,215,229,0.18)";
-  context.lineWidth = 1.5;
-  context.stroke();
-
-  context.beginPath();
-  context.moveTo(qrSectionX - px(10), px(32));
-  context.lineTo(qrSectionX - px(10), height - px(32));
-  context.strokeStyle = "rgba(255,255,255,0.08)";
-  context.lineWidth = 1;
-  context.stroke();
-
   context.fillStyle = CARD_THEME.amber;
   context.font = `700 ${px(10)}px Arial`;
   context.fillText("CARESYNC DIGITAL HEALTH CARD", leftX, topY);
   context.fillStyle = CARD_THEME.muted;
   context.font = `600 ${px(10)}px Arial`;
   context.fillText("Unified clinical access", leftX, topY + px(22));
-
-  context.fillStyle = "rgba(255,255,255,0.08)";
-  context.fillRect(leftX, px(58), qrSectionX - leftX - px(18), 1);
 
   context.fillStyle = CARD_THEME.subtle;
   context.font = `700 ${px(9)}px Arial`;
@@ -560,29 +559,26 @@ function drawFrontCard(
   drawDetailLine("Address", displayAddress, detailStartY + px(48));
   drawDetailLine("Issued", data.issuedOn, detailStartY + px(72));
 
-  context.fillStyle = CARD_THEME.cyan;
-  context.textAlign = "center";
-  context.font = `700 ${px(10)}px Arial`;
-  context.fillText("SCAN TO VERIFY", qrSectionX + rightSectionWidth / 2, qrFrameY - px(10));
-  context.fillStyle = CARD_THEME.muted;
-  context.font = `600 ${px(10.5)}px Arial`;
-  context.fillText("CareSync patient access", qrSectionX + rightSectionWidth / 2, qrFrameY + qrFrameSize + px(22));
-
   roundedRect(context, qrFrameX, qrFrameY, qrFrameSize, qrFrameSize, px(19));
-  context.fillStyle = CARD_THEME.qrBackground;
+  const qrFrameGradient = context.createLinearGradient(
+    qrFrameX,
+    qrFrameY,
+    qrFrameX + qrFrameSize,
+    qrFrameY + qrFrameSize,
+  );
+  qrFrameGradient.addColorStop(0, CARD_THEME.qrFrameStart);
+  qrFrameGradient.addColorStop(1, CARD_THEME.qrFrameEnd);
+  context.fillStyle = qrFrameGradient;
   context.fill();
   context.strokeStyle = CARD_THEME.qrStroke;
   context.lineWidth = 2;
   context.stroke();
 
   drawStyledQr(context, data.qrMatrix, qrCodeX, qrCodeY, qrCodeSize);
-  context.textAlign = "left";
-
-  context.fillStyle = "rgba(255,255,255,0.06)";
-  context.fillRect(leftX, height - px(34), width - px(40), 1);
   context.fillStyle = CARD_THEME.muted;
-  context.font = `600 ${px(7.2)}px Arial`;
-  context.fillText("CareSync secure digital health card", leftX, height - px(18));
+  context.font = `600 ${px(6.2)}px Arial`;
+  context.textAlign = "center";
+  context.fillText("CareSync secure digital health card", width / 2, height - px(7));
   context.textAlign = "left";
 
   context.restore();
