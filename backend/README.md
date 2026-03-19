@@ -31,13 +31,28 @@ Structure:
 
 ## Quick Start
 
+Create `backend/.env` with at least:
+
+```env
+APP_NAME=CareSync Backend
+ENVIRONMENT=development
+API_PREFIX=/api/v1
+CORS_ORIGINS=http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:8080,http://localhost:8080
+DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/caresync
+JWT_SECRET_KEY=change-me-in-production
+JWT_ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=120
+OPENAI_API_KEY=
+OPENAI_MODEL=gpt-4o-mini
+```
+
 ```bash
 cd backend
-cp .env.example .env
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install -e .
+python -m pip install -e ".[dev]"
+createdb caresync
 alembic upgrade head
 python -m uvicorn app.main:app --reload
 ```
@@ -50,6 +65,7 @@ rm -rf path
 
 API docs:
 - `http://127.0.0.1:8000/docs`
+- Root project overview: [README.md](/Users/azzu/Documents/caresync/README.md)
 
 ## Example API Flow
 

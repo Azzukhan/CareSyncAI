@@ -1,12 +1,24 @@
 import json
-from datetime import date
+from datetime import date, datetime, timezone
 
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.base import Base
-from app.models import CareAgentType, CarePlanType, LabOrder, LabReport, User, UserRole
+from app.models import (
+    CareAgentType,
+    CarePlanType,
+    HealthDataFile,
+    HealthAppConnection,
+    HealthMetric,
+    LabOrder,
+    LabReport,
+    MetricSource,
+    MetricType,
+    User,
+    UserRole,
+)
 from app.modules.agentic.llm import MedicalStructuredResponse, agentic_llm_service
 from app.modules.agentic.schemas import AgentQueryRequest, CarePlanCheckinCreateRequest
 from app.modules.agentic.service import (
@@ -252,3 +264,124 @@ async def test_medical_agent_context_includes_recent_lab_reports(
     assert report_payload["test_description"] == "Full blood count"
     assert report_payload["status"] == "completed"
     assert "Hemoglobin slightly low" in report_payload["report_summary"]
+
+
+@pytest.mark.asyncio
+async def test_medical_agent_context_includes_activity_sync_data(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    patient = await create_user(db_session, "patient8@example.com")
+    health_file = HealthDataFile(
+        user_id=patient.id,
+        filename="apple-health.json",
+        file_url="/media/health_data/apple-health.json",
+        file_type="json",
+        provider="apple_health",
+        parsed_status="parsed",
+        records_imported=3,
+    )
+    db_session.add(health_file)
+    await db_session.flush()
+    db_session.add(
+        HealthAppConnection(
+            user_id=patient.id,
+            provider="apple_health",
+            is_connected=True,
+            sync_method="export_file",
+            last_synced_at=datetime.now(timezone.utc),
+        )
+    )
+    db_session.add_all(
+        [
+            HealthMetric(
+                user_id=patient.id,
+                metric_type=MetricType.STEPS,
+                value=8200,
+                unit="steps",
+                recorded_date=date.today(),
+                source=MetricSource.APP,
+                provider="apple_health",
+                health_data_file_id=health_file.id,
+            ),
+            HealthMetric(
+                user_id=patient.id,
+                metric_type=MetricType.ACTIVE_MINUTES,
+                value=46,
+                unit="minutes",
+                recorded_date=date.today(),
+                source=MetricSource.APP,
+                provider="apple_health",
+                health_data_file_id=health_file.id,
+            ),
+            HealthMetric(
+                user_id=patient.id,
+                metric_type=MetricType.DISTANCE_KM,
+                value=5.1,
+                unit="km",
+                recorded_date=date.today(),
+                source=MetricSource.APP,
+                provider="apple_health",
+                health_data_file_id=health_file.id,
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    captured_snapshot: dict[str, object] = {}
+
+    async def fake_run_medical(
+        *,
+        user_id: str,
+        prompt: str,
+        context_messages: list[dict[str, str]],
+        context_snapshot: str,
+    ) -> MedicalStructuredResponse:
+        captured_snapshot.update(json.loads(context_snapshot))
+        return MedicalStructuredResponse(
+            summary="Reviewed the current activity trends.",
+            highlights=["Activity sync context received."],
+            suggested_follow_ups=[],
+        )
+
+    monkeypatch.setattr(agentic_llm_service, "run_medical", fake_run_medical)
+
+    await query_agent_response(
+        db_session,
+        user=patient,
+        payload=AgentQueryRequest(
+            prompt="Analyze my current activity and tell me how much to increase my steps.",
+            agent=CareAgentType.MEDICAL,
+        ),
+    )
+
+    assert "activity_overview" in captured_snapshot
+    assert "activity_sync_sources" in captured_snapshot
+    assert "authoritative_activity_sources" in captured_snapshot
+    assert "verified_activity_providers" in captured_snapshot
+    assert "recent_activity_days" in captured_snapshot
+    assert "latest_activity_metrics" in captured_snapshot
+    assert captured_snapshot["hydration_tracking_available"] is False
+    latest_metrics = captured_snapshot["latest_activity_metrics"]
+    assert isinstance(latest_metrics, dict)
+    assert latest_metrics["steps"]["value"] == 8200
+    assert latest_metrics["steps"]["provider"] == "apple_health"
+    assert latest_metrics["steps"]["source_label"] == "Apple Health"
+    sources = captured_snapshot["activity_sync_sources"]
+    assert isinstance(sources, list)
+    assert any(
+        isinstance(source, dict) and source.get("provider") == "apple_health"
+        for source in sources
+    )
+    authoritative_sources = captured_snapshot["authoritative_activity_sources"]
+    assert isinstance(authoritative_sources, list)
+    assert any(
+        isinstance(source, dict) and source.get("provider") == "apple_health"
+        for source in authoritative_sources
+    )
+    recent_days = captured_snapshot["recent_activity_days"]
+    assert isinstance(recent_days, list)
+    assert any(
+        isinstance(day, dict)
+        and day.get("metrics", {}).get("steps", {}).get("value") == 8200
+        for day in recent_days
+    )

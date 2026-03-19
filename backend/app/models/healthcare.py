@@ -2,7 +2,18 @@ import enum
 import uuid
 from datetime import date, datetime, timezone
 
-from sqlalchemy import Boolean, Date, DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import (
+    Boolean,
+    Date,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -130,11 +141,34 @@ class HealthDataFile(Base):
     user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), index=True)
     filename: Mapped[str] = mapped_column(String(255))
     file_url: Mapped[str] = mapped_column(String(255))
-    file_type: Mapped[str] = mapped_column(String(20))  # csv, json
+    file_type: Mapped[str] = mapped_column(String(20))  # csv, json, xml
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     parsed_status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, parsed, failed
     records_imported: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+
+
+class HealthAppConnection(Base):
+    __table_args__ = (UniqueConstraint("user_id", "provider", name="uq_healthappconnection_user_provider"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("user.id"), index=True)
+    provider: Mapped[str] = mapped_column(String(40), index=True)
+    is_connected: Mapped[bool] = mapped_column(Boolean, default=True)
+    sync_method: Mapped[str] = mapped_column(String(30), default="export_file")
+    connected_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
     )
 
 
@@ -146,6 +180,14 @@ class HealthMetric(Base):
     unit: Mapped[str] = mapped_column(String(30))
     recorded_date: Mapped[date] = mapped_column(Date, index=True)
     source: Mapped[MetricSource] = mapped_column(Enum(MetricSource), default=MetricSource.MANUAL)
+    provider: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    health_data_file_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("healthdatafile.id"), nullable=True, index=True
+    )
+    external_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    source_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    device_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

@@ -53,6 +53,7 @@ interface NavItem {
 
 const primaryNavItems: NavItem[] = [
   { to: "/dashboard/patient", label: "Patient Dashboard", icon: Activity, exact: true },
+  { to: "/dashboard/patient/activity-sync", label: "Fitness Activity", icon: Heart },
 ];
 
 const aiNavItems: NavItem[] = [

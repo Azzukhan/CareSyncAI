@@ -21,7 +21,6 @@ from app.models import (
     CarePlanItemType,
     CarePlanStatus,
     CarePlanType,
-    HealthMetric,
     LabOrder,
     LabReport,
     MedicationOrder,
@@ -33,6 +32,9 @@ from app.modules.agentic.llm import (
     ExerciseStructuredResponse,
     MedicalStructuredResponse,
     agentic_llm_service,
+)
+from app.modules.health_data.service import (
+    get_canonical_activity_context,
 )
 from app.modules.agentic.schemas import (
     AgentCalendarEventResponse,
@@ -579,27 +581,47 @@ async def _build_context_snapshot(db: AsyncSession, user: User) -> tuple[Agentic
         ]
 
     if profile.share_health_metrics:
-        metrics = list(
-            (
-                await db.execute(
-                    select(HealthMetric)
-                    .where(HealthMetric.user_id == user.id)
-                    .order_by(HealthMetric.recorded_date.desc())
-                    .limit(10)
-                )
-            )
-            .scalars()
-            .all()
+        activity_context = await get_canonical_activity_context(
+            db,
+            user_id=user.id,
+            days=30,
         )
+        payload["hydration_tracking_available"] = bool(
+            activity_context.get("hydration_tracking_available", False)
+        )
+        payload["activity_sync_sources"] = activity_context.get("activity_sync_sources", [])
+        payload["verified_activity_providers"] = activity_context.get("verified_providers", [])
+        payload["authoritative_activity_sources"] = activity_context.get(
+            "authoritative_sources", []
+        )
+        payload["latest_imported_file"] = activity_context.get("latest_imported_file")
+        payload["latest_activity_metrics"] = activity_context.get(
+            "latest_activity_metrics", {}
+        )
+        payload["today_activity_metrics"] = activity_context.get(
+            "today_activity_metrics", {}
+        )
+        payload["recent_activity_days"] = activity_context.get("recent_activity_days", [])
         payload["recent_metrics"] = [
             {
-                "metric_type": metric.metric_type.value,
-                "value": metric.value,
-                "unit": metric.unit,
-                "recorded_date": metric.recorded_date.isoformat(),
+                "metric_type": metric_name,
+                **metric_payload,
             }
-            for metric in metrics
-        ]
+            for day in activity_context.get("recent_activity_days", [])
+            if isinstance(day, dict)
+            for metric_name, metric_payload in (
+                day.get("metrics", {}).items()
+                if isinstance(day.get("metrics"), dict)
+                else []
+            )
+        ][:12]
+        payload["activity_overview"] = {
+            "range_start": activity_context.get("range_start"),
+            "range_end": activity_context.get("range_end"),
+            "connected_apps": activity_context.get("connected_apps", 0),
+            "imported_files": activity_context.get("imported_files", 0),
+            "metrics": activity_context.get("metrics", []),
+        }
 
     return profile, json.dumps(payload, default=str, indent=2)
 

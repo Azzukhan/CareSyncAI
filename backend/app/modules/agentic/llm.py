@@ -1,5 +1,6 @@
 import logging
 from datetime import date, timedelta
+from typing import TypeVar
 
 from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
@@ -62,6 +63,14 @@ class DietStructuredResponse(BaseModel):
     items: list[DietStructuredItem] = Field(default_factory=list)
 
 
+StructuredResponseT = TypeVar(
+    "StructuredResponseT",
+    MedicalStructuredResponse,
+    ExerciseStructuredResponse,
+    DietStructuredResponse,
+)
+
+
 class AgenticLLMService:
     def __init__(self) -> None:
         self._settings = get_settings()
@@ -80,27 +89,39 @@ class AgenticLLMService:
         context_snapshot: str,
     ) -> MedicalStructuredResponse:
         if not self._client:
-            return _fallback_medical(prompt)
+            return _normalize_structured_response(_fallback_medical(prompt))
 
         instructions = (
             "You are CareSyncAI Medical, a concise healthcare support assistant.\n"
             f"Today is {date.today().isoformat()}.\n"
             "Use the supplied patient context and active care plans.\n"
+            "Base the answer on the latest canonical activity data and on the exact values and dates provided in context.\n"
+            "If synced activity data is present, use steps, active minutes, distance, sleep, and calorie patterns when answering questions about fitness, recovery, safe increases in activity, or symptom context.\n"
+            "When both lab reports and activity data are present, connect them carefully and explain what to discuss with a clinician before recommending increases in training load.\n"
             "If lab reports are present in context, analyze their summaries carefully and explain what the patient may want to improve or discuss with a clinician.\n"
             "If exact values, units, or reference ranges are missing, say that explicitly instead of over-claiming.\n"
+            "Do not call something a concern in the summary unless you explain it with actual data in the summary or highlights.\n"
+            "If the context identifies Apple Health or Google Fitness as the source of truth for a date range, mention that source when it materially affects the answer.\n"
+            "When mentioning sleep, include the recorded hours and compare them to the usual adult target of 7 to 9 hours if that metric is available.\n"
+            "When asked about water or hydration, say clearly whether hydration is tracked. If it is not tracked, give a practical whole-day fluid estimate in liters or cups and explain that it is a general estimate, not a measured target.\n"
+            "If the user asks for analysis, identify the top 2 to 4 useful findings and prioritize the most important gap instead of repeating similar points.\n"
+            "Keep the summary short and specific. Highlights must add new information and must not restate the summary sentence.\n"
+            "If hydration is not tracked, do not imply that you measured it.\n"
+            "Avoid repeating the same numeric fact across the summary and highlights unless it is necessary for clarity.\n"
             "Do not diagnose, prescribe new medication, or expose hidden/private data.\n"
             "Ask follow-up questions when details are missing.\n"
             "Prefer actionable self-management guidance, safety cautions, and plan-aware coaching.\n"
             "Output structured JSON matching the schema.\n"
             f"Patient context:\n{context_snapshot}"
         )
-        return await self._parse(
+        parsed = await self._parse(
             user_id=user_id,
             prompt=prompt,
             context_messages=context_messages,
             instructions=instructions,
             response_type=MedicalStructuredResponse,
         )
+        return _normalize_structured_response(MedicalStructuredResponse.model_validate(parsed))
 
     async def run_exercise(
         self,
@@ -116,20 +137,26 @@ class AgenticLLMService:
         instructions = (
             "You are CareSyncAI Exercise, a medically-aware exercise planner.\n"
             f"Today is {date.today().isoformat()}.\n"
-            "Use the supplied patient context, current exercise plan, and adherence details.\n"
+            "Use the supplied patient context, current exercise plan, adherence details, and any synced activity metrics.\n"
             "Always account for pain, mobility limits, motivation, available time, and missed sessions.\n"
+            "If steps, active minutes, distance, calories, or sleep trends are available, use the exact values and dates to suggest realistic increases or reductions instead of generic exercise jumps.\n"
+            "When activity source provenance is available, mention whether the recommendation is based on Apple Health or Google Fitness data when that helps explain the advice.\n"
+            "If sleep is relevant, include the recorded hours explicitly.\n"
+            "If the user asks about hydration but hydration is not tracked, say that clearly before giving general exercise hydration guidance.\n"
             "Return a revised weekly exercise plan when the user asks for planning or changes.\n"
             "Keep exercise names clear, durations realistic, and instructions short.\n"
+            "Do not repeat the same metric in both the summary and highlights unless needed for safety.\n"
             "Output structured JSON matching the schema.\n"
             f"Patient context:\n{context_snapshot}"
         )
-        return await self._parse(
+        parsed = await self._parse(
             user_id=user_id,
             prompt=prompt,
             context_messages=context_messages,
             instructions=instructions,
             response_type=ExerciseStructuredResponse,
         )
+        return _normalize_structured_response(ExerciseStructuredResponse.model_validate(parsed))
 
     async def run_diet(
         self,
@@ -145,20 +172,25 @@ class AgenticLLMService:
         instructions = (
             "You are CareSyncAI Diet, a medically-aware meal planning assistant.\n"
             f"Today is {date.today().isoformat()}.\n"
-            "Use the supplied patient context, current diet plan, allergies, and adherence details.\n"
+            "Use the supplied patient context, current diet plan, allergies, adherence details, and any synced activity metrics.\n"
             "Always respect allergies, dietary constraints, and schedule preferences.\n"
+            "If activity data is present, use the exact values and dates when discussing energy balance, fueling, hydration, recovery, and meal timing.\n"
+            "When activity source provenance is available, mention whether the recommendation is based on Apple Health or Google Fitness data when useful.\n"
+            "If hydration is asked about and hydration is not tracked, say that clearly before giving general guidance.\n"
             "Return a revised weekly meal plan when the user asks for planning or changes.\n"
             "Keep meals practical and explain why they fit the patient's goals.\n"
+            "Do not repeat the same fact across summary and highlights.\n"
             "Output structured JSON matching the schema.\n"
             f"Patient context:\n{context_snapshot}"
         )
-        return await self._parse(
+        parsed = await self._parse(
             user_id=user_id,
             prompt=prompt,
             context_messages=context_messages,
             instructions=instructions,
             response_type=DietStructuredResponse,
         )
+        return _normalize_structured_response(DietStructuredResponse.model_validate(parsed))
 
     async def _parse(
         self,
@@ -358,3 +390,28 @@ def _fallback_diet(prompt: str) -> DietStructuredResponse:
 
 
 agentic_llm_service = AgenticLLMService()
+
+
+def _normalize_structured_response(response: StructuredResponseT) -> StructuredResponseT:
+    normalized = response.model_copy(deep=True)
+    normalized.summary = " ".join(normalized.summary.split())
+    normalized.highlights = _dedupe_strings(normalized.highlights)
+    normalized.suggested_follow_ups = _dedupe_strings(normalized.suggested_follow_ups)
+    normalized.highlights = _dedupe_strings(normalized.highlights)[:4]
+    normalized.suggested_follow_ups = normalized.suggested_follow_ups[:3]
+    return normalized
+
+
+def _dedupe_strings(items: list[str]) -> list[str]:
+    deduped: list[str] = []
+    seen: set[str] = set()
+    for item in items:
+        normalized = " ".join(item.split())
+        if not normalized:
+            continue
+        key = normalized.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(normalized)
+    return deduped

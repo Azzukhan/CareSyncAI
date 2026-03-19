@@ -6,14 +6,20 @@ React, TypeScript, and Vite frontend for CareSync.
 
 Frontend uses `VITE_API_BASE_URL` to call the backend API.
 
+Create `frontend/.env` with:
+
+```env
+VITE_API_BASE_URL=http://127.0.0.1:8000
+```
+
 ```sh
 cd frontend
-cp .env.example .env
 npm install
 npm run dev
 ```
 
-Start the backend separately using [../backend/README.md](/Users/azzu/Documents/caresync/backend/README.md).
+Start the backend separately using [backend/README.md](/Users/azzu/Documents/caresync/backend/README.md).
+For the full product overview, setup flow, and feature list, use the root [README.md](/Users/azzu/Documents/caresync/README.md).
 
 ## Scripts
 

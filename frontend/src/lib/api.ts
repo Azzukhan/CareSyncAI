@@ -153,6 +153,54 @@ export class ApiError extends Error {
   }
 }
 
+function formatApiErrorDetail(detail: unknown): string | null {
+  if (typeof detail === "string" && detail.trim().length > 0) {
+    return detail;
+  }
+
+  if (Array.isArray(detail)) {
+    const messages = detail
+      .map((item) => {
+        if (typeof item === "string" && item.trim().length > 0) {
+          return item;
+        }
+
+        if (item && typeof item === "object") {
+          const message =
+            "msg" in item && typeof item.msg === "string"
+              ? item.msg
+              : "message" in item && typeof item.message === "string"
+                ? item.message
+                : null;
+
+          if (!message) {
+            return null;
+          }
+
+          const location =
+            "loc" in item && Array.isArray(item.loc)
+              ? item.loc.filter((part) => typeof part === "string" && part !== "body").join(" > ")
+              : "";
+
+          return location ? `${location}: ${message}` : message;
+        }
+
+        return null;
+      })
+      .filter((message): message is string => Boolean(message));
+
+    return messages.length > 0 ? messages.join(". ") : null;
+  }
+
+  if (detail && typeof detail === "object") {
+    if ("message" in detail && typeof detail.message === "string" && detail.message.trim().length > 0) {
+      return detail.message;
+    }
+  }
+
+  return null;
+}
+
 async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = new Headers(options.headers ?? {});
   if (!(options.body instanceof FormData) && !headers.has("Content-Type")) {
@@ -168,7 +216,8 @@ async function apiRequest<T>(path: string, options: RequestInit = {}): Promise<T
     let message = `Request failed (${response.status})`;
     try {
       const data = await response.json();
-      message = data?.detail ?? message;
+      const formattedMessage = formatApiErrorDetail(data?.detail ?? data);
+      message = formattedMessage ?? message;
     } catch {
       // Ignore JSON parse errors.
     }
@@ -504,6 +553,7 @@ export interface HealthFileUpload {
   filename: string;
   file_url: string;
   file_type: string;
+  provider?: HealthAppProvider | null;
   parsed_status: string;
   records_imported: number;
   created_at: string;
@@ -516,6 +566,13 @@ export interface HealthMetricEntry {
   unit: string;
   recorded_date: string;
   source: string;
+  source_label: string;
+  provider?: HealthAppProvider | null;
+  health_data_file_id?: string | null;
+  external_type?: string | null;
+  source_name?: string | null;
+  source_version?: string | null;
+  device_name?: string | null;
   created_at: string;
 }
 
@@ -528,6 +585,91 @@ export interface HealthMetricsSummary {
   weight?: number | null;
   active_minutes?: number | null;
   distance_km?: number | null;
+}
+
+export type HealthAppProvider = "apple_health" | "google_fit";
+
+export interface HealthAppConnection {
+  id: string;
+  provider: HealthAppProvider;
+  is_connected: boolean;
+  sync_method: "export_file" | "manual_entry" | "mobile_app";
+  connected_at: string;
+  last_synced_at?: string | null;
+  updated_at: string;
+}
+
+export interface ActivityOverviewMetric {
+  metric_type: string;
+  unit: string;
+  latest_value?: number | null;
+  latest_recorded_date?: string | null;
+  last_7_day_average?: number | null;
+  previous_7_day_average?: number | null;
+  last_7_day_total?: number | null;
+  trend: "up" | "down" | "flat" | "insufficient";
+}
+
+export interface ActivityMetricSnapshot {
+  value: number;
+  unit: string;
+  recorded_date: string;
+  source: string;
+  source_label: string;
+  provider?: HealthAppProvider | null;
+}
+
+export interface ActivityRecentDayMetric {
+  value: number;
+  unit: string;
+}
+
+export interface ActivityRecentDay {
+  date: string;
+  source: string;
+  source_label: string;
+  provider?: HealthAppProvider | null;
+  metrics: Record<string, ActivityRecentDayMetric>;
+}
+
+export interface ActivityAuthoritativeSource {
+  source: string;
+  source_label: string;
+  provider?: HealthAppProvider | null;
+  is_connected: boolean;
+  last_synced_at?: string | null;
+  days_count: number;
+  range_start: string;
+  range_end: string;
+}
+
+export interface ActivityVerifiedProvider {
+  provider: HealthAppProvider;
+  provider_label: string;
+  last_synced_at?: string | null;
+}
+
+export interface ActivityLatestImportedFile {
+  filename: string;
+  provider?: HealthAppProvider | null;
+  parsed_status: string;
+  records_imported: number;
+  created_at: string;
+}
+
+export interface ActivityOverview {
+  range_start: string;
+  range_end: string;
+  connected_apps: number;
+  imported_files: number;
+  metrics: ActivityOverviewMetric[];
+  hydration_tracking_available: boolean;
+  authoritative_sources: ActivityAuthoritativeSource[];
+  verified_providers: ActivityVerifiedProvider[];
+  latest_activity_metrics: Record<string, ActivityMetricSnapshot>;
+  today_activity_metrics: Record<string, ActivityMetricSnapshot>;
+  recent_activity_days: ActivityRecentDay[];
+  latest_imported_file?: ActivityLatestImportedFile | null;
 }
 
 // ── AI Assistant Types ─────────────────────────────────────────────
@@ -579,10 +721,16 @@ export interface CalendarEventEntry {
 
 // ── Health Data API ────────────────────────────────────────────────
 
-export async function uploadHealthFile(token: string, file: File): Promise<HealthFileUpload> {
+export async function uploadHealthFile(
+  token: string,
+  file: File,
+  provider: HealthAppProvider,
+): Promise<HealthFileUpload> {
   const formData = new FormData();
   formData.append("file", file);
-  return apiRequest<HealthFileUpload>("/api/v1/health-data/upload", {
+  const qs = new URLSearchParams();
+  qs.set("provider", provider);
+  return apiRequest<HealthFileUpload>(`/api/v1/health-data/upload${qs.toString() ? `?${qs.toString()}` : ""}`, {
     method: "POST",
     headers: authHeaders(token),
     body: formData,
@@ -629,6 +777,45 @@ export async function getHealthMetricsSummary(
     `/api/v1/health-data/metrics/summary?target_date=${encodeURIComponent(targetDate)}`,
     { headers: authHeaders(token) },
   );
+}
+
+export async function listHealthAppConnections(
+  token: string,
+): Promise<{ items: HealthAppConnection[] }> {
+  return apiRequest<{ items: HealthAppConnection[] }>("/api/v1/health-data/integrations", {
+    headers: authHeaders(token),
+  });
+}
+
+export async function upsertHealthAppConnection(
+  token: string,
+  provider: HealthAppProvider,
+  input: { is_connected?: boolean; sync_method?: "export_file" | "manual_entry" | "mobile_app" },
+): Promise<HealthAppConnection> {
+  return apiRequest<HealthAppConnection>(`/api/v1/health-data/integrations/${provider}`, {
+    method: "PUT",
+    headers: authHeaders(token),
+    body: JSON.stringify(input),
+  });
+}
+
+export async function removeHealthAppConnection(
+  token: string,
+  provider: HealthAppProvider,
+): Promise<void> {
+  await apiRequest(`/api/v1/health-data/integrations/${provider}`, {
+    method: "DELETE",
+    headers: authHeaders(token),
+  });
+}
+
+export async function getActivityOverview(
+  token: string,
+  days = 30,
+): Promise<ActivityOverview> {
+  return apiRequest<ActivityOverview>(`/api/v1/health-data/activity-overview?days=${days}`, {
+    headers: authHeaders(token),
+  });
 }
 
 // ── AI Assistant API ───────────────────────────────────────────────

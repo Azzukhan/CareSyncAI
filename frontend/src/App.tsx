@@ -12,6 +12,7 @@ import Login from "./pages/Login";
 import PatientSignup from "./pages/PatientSignup";
 import SignupSuccess from "./pages/SignupSuccess";
 import PatientDashboard from "./pages/patient/Dashboard";
+import ActivitySyncPage from "./pages/patient/ActivitySync";
 import MedicalAssistant from "./pages/patient/MedicalAssistant";
 import ExerciseAssistant from "./pages/patient/ExerciseAssistant";
 import DietAssistant from "./pages/patient/DietAssistant";
@@ -51,6 +52,7 @@ const App = () => (
           <Route path="/signup" element={<Layout><PatientSignup /></Layout>} />
           <Route path="/signup/success" element={<Layout><SignupSuccess /></Layout>} />
           <Route path="/dashboard/patient" element={<PatientDashboard />} />
+          <Route path="/dashboard/patient/activity-sync" element={<ActivitySyncPage />} />
           <Route path="/dashboard/patient/ai-assistant" element={<MedicalAssistant />} />
           <Route path="/dashboard/patient/exercise-planner" element={<ExerciseAssistant />} />
           <Route path="/dashboard/patient/diet-planner" element={<DietAssistant />} />

@@ -522,8 +522,8 @@ function ProfileSheet({
                   onCheckedChange: setShareMedications,
                 },
                 {
-                  label: "Health metrics",
-                  description: "Vitals, measurements, and tracked health data.",
+                  label: "Activity and metrics",
+                  description: "Steps, activity, sleep, and other tracked health data.",
                   checked: shareHealthMetrics,
                   onCheckedChange: setShareHealthMetrics,
                 },
