@@ -10,6 +10,7 @@ from sqlalchemy import (
     Float,
     ForeignKey,
     Integer,
+    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -143,6 +144,12 @@ class HealthDataFile(Base):
     file_url: Mapped[str] = mapped_column(String(255))
     file_type: Mapped[str] = mapped_column(String(20))  # csv, json, xml
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
+    export_date: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    export_locale: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    source_date_start: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_date_end: Mapped[date | None] = mapped_column(Date, nullable=True)
+    source_tag_counts: Mapped[dict[str, int] | None] = mapped_column(JSON, nullable=True)
+    source_profile: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     parsed_status: Mapped[str] = mapped_column(String(20), default="pending")  # pending, parsed, failed
     records_imported: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(
@@ -179,6 +186,7 @@ class HealthMetric(Base):
     value: Mapped[float] = mapped_column(Float)
     unit: Mapped[str] = mapped_column(String(30))
     recorded_date: Mapped[date] = mapped_column(Date, index=True)
+    recorded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     source: Mapped[MetricSource] = mapped_column(Enum(MetricSource), default=MetricSource.MANUAL)
     provider: Mapped[str | None] = mapped_column(String(40), nullable=True, index=True)
     health_data_file_id: Mapped[str | None] = mapped_column(
@@ -187,7 +195,14 @@ class HealthMetric(Base):
     external_type: Mapped[str | None] = mapped_column(String(120), nullable=True)
     source_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
     source_version: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    source_unit: Mapped[str | None] = mapped_column(String(60), nullable=True)
+    source_created_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_start_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_end_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    source_record_count: Mapped[int] = mapped_column(Integer, default=1)
+    source_metadata: Mapped[dict[str, object] | None] = mapped_column(JSON, nullable=True)
     device_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    raw_device: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

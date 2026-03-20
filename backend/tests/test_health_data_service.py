@@ -16,56 +16,122 @@ from app.modules.health_data.service import (
 )
 
 
-APPLE_HEALTH_XML_SAMPLE = """<?xml version="1.0"?>
-<ClinicalDocument xmlns="urn:hl7-org:v3" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
-  <entry>
-    <observation classCode="OBS" moodCode="EVN">
-      <text>
-        <sourceName>Azzu's Apple Watch</sourceName>
-        <sourceVersion>11.5</sourceVersion>
-        <device>&lt;&lt;HKDevice: 0x1, name:Apple Watch, manufacturer:Apple Inc.&gt;&gt;</device>
-        <value>78</value>
-        <type>HKQuantityTypeIdentifierHeartRate</type>
-        <unit>count/min</unit>
-      </text>
-      <effectiveTime>
-        <low value="20260318070000+0000" />
-        <high value="20260318070000+0000" />
-      </effectiveTime>
-      <value xsi:type="PQ" value="78" unit="count/min" />
-    </observation>
-  </entry>
-  <entry>
-    <observation classCode="OBS" moodCode="EVN">
-      <text>
-        <sourceName>Azzu's iPhone</sourceName>
-        <sourceVersion>18.4</sourceVersion>
-        <value>8042</value>
-        <type>HKQuantityTypeIdentifierStepCount</type>
-        <unit>count</unit>
-      </text>
-      <effectiveTime>
-        <low value="20260318090000+0000" />
-        <high value="20260318090000+0000" />
-      </effectiveTime>
-      <value xsi:type="PQ" value="8042" unit="count" />
-    </observation>
-  </entry>
-  <entry>
-    <observation classCode="OBS" moodCode="EVN">
-      <text>
-        <sourceName>Azzu's iPhone</sourceName>
-        <sourceVersion>18.4</sourceVersion>
-        <value>HKCategoryValueSleepAnalysisAsleepCore</value>
-        <type>HKCategoryTypeIdentifierSleepAnalysis</type>
-      </text>
-      <effectiveTime>
-        <low value="20260317230000+0000" />
-        <high value="20260318030000+0000" />
-      </effectiveTime>
-    </observation>
-  </entry>
-</ClinicalDocument>
+APPLE_HEALTH_XML_SAMPLE = """<?xml version="1.0" encoding="UTF-8"?>
+<HealthData locale="en_GB">
+  <ExportDate value="2026-03-18 20:48:08 +0000" />
+  <Me
+    HKCharacteristicTypeIdentifierDateOfBirth="1996-10-18"
+    HKCharacteristicTypeIdentifierBiologicalSex="HKBiologicalSexMale"
+    HKCharacteristicTypeIdentifierBloodType="HKBloodTypeOPositive"
+  />
+  <Record
+    type="HKQuantityTypeIdentifierStepCount"
+    sourceName="Azzu's iPhone"
+    sourceVersion="18.4"
+    unit="count"
+    creationDate="2026-03-18 09:30:00 +0000"
+    startDate="2026-03-18 09:00:00 +0000"
+    endDate="2026-03-18 09:30:00 +0000"
+    value="3000"
+  >
+    <MetadataEntry key="HKWasUserEntered" value="NO" />
+  </Record>
+  <Record
+    type="HKQuantityTypeIdentifierStepCount"
+    sourceName="Azzu's iPhone"
+    sourceVersion="18.4"
+    unit="count"
+    creationDate="2026-03-18 18:15:00 +0000"
+    startDate="2026-03-18 18:00:00 +0000"
+    endDate="2026-03-18 18:15:00 +0000"
+    value="5200"
+  />
+  <Record
+    type="HKQuantityTypeIdentifierDistanceCycling"
+    sourceName="Life Fitness"
+    sourceVersion="321"
+    unit="km"
+    creationDate="2026-03-18 18:45:00 +0000"
+    startDate="2026-03-18 18:00:00 +0000"
+    endDate="2026-03-18 18:45:00 +0000"
+    value="5.375"
+  />
+  <Record
+    type="HKQuantityTypeIdentifierHeartRate"
+    sourceName="Azzu's Apple Watch"
+    sourceVersion="11.5"
+    device="&lt;&lt;HKDevice: 0x1, name:Apple Watch, manufacturer:Apple Inc.&gt;&gt;"
+    unit="count/min"
+    creationDate="2026-03-18 07:00:00 +0000"
+    startDate="2026-03-18 07:00:00 +0000"
+    endDate="2026-03-18 07:00:00 +0000"
+    value="78"
+  >
+    <MetadataEntry key="HKMetadataKeyHeartRateMotionContext" value="1" />
+  </Record>
+  <Record
+    type="HKCategoryTypeIdentifierSleepAnalysis"
+    sourceName="Azzu's Apple Watch"
+    sourceVersion="11.5"
+    creationDate="2026-03-18 06:00:00 +0000"
+    startDate="2026-03-17 22:00:00 +0000"
+    endDate="2026-03-18 06:00:00 +0000"
+    value="HKCategoryValueSleepAnalysisInBed"
+  />
+  <Record
+    type="HKCategoryTypeIdentifierSleepAnalysis"
+    sourceName="Azzu's Apple Watch"
+    sourceVersion="11.5"
+    creationDate="2026-03-18 06:00:00 +0000"
+    startDate="2026-03-17 23:00:00 +0000"
+    endDate="2026-03-18 06:00:00 +0000"
+    value="HKCategoryValueSleepAnalysisAsleepCore"
+  >
+    <MetadataEntry key="HKTimeZone" value="Europe/London" />
+  </Record>
+  <Workout
+    workoutActivityType="HKWorkoutActivityTypeCycling"
+    duration="45"
+    durationUnit="min"
+    sourceName="Life Fitness"
+    sourceVersion="321"
+    creationDate="2026-03-18 18:45:00 +0000"
+    startDate="2026-03-18 18:00:00 +0000"
+    endDate="2026-03-18 18:45:00 +0000"
+  >
+    <MetadataEntry key="Title" value="Bike" />
+    <WorkoutStatistics
+      type="HKQuantityTypeIdentifierDistanceCycling"
+      startDate="2026-03-18 18:00:00 +0000"
+      endDate="2026-03-18 18:45:00 +0000"
+      sum="5.375"
+      unit="km"
+    />
+  </Workout>
+  <ActivitySummary
+    dateComponents="2026-03-18"
+    activeEnergyBurned="420"
+    activeEnergyBurnedGoal="280"
+    activeEnergyBurnedUnit="kcal"
+    appleMoveTime="55"
+    appleMoveTimeGoal="0"
+    appleExerciseTime="45"
+    appleExerciseTimeGoal="30"
+    appleStandHours="12"
+    appleStandHoursGoal="10"
+  />
+  <Audiogram
+    type="HKDataTypeIdentifierAudiogram"
+    sourceName="Health"
+    sourceVersion="18.2.1"
+    device="&lt;&lt;HKDevice: 0x2, name:AirPods Pro, manufacturer:Apple Inc.&gt;&gt;"
+    creationDate="2026-03-18 20:00:00 +0000"
+    startDate="2026-03-18 19:55:00 +0000"
+    endDate="2026-03-18 20:00:00 +0000"
+  >
+    <MetadataEntry key="HKAlgorithmVersion" value="1" />
+  </Audiogram>
+</HealthData>
 """
 
 GOOGLE_FIT_JSON_SAMPLE = """
@@ -104,8 +170,8 @@ async def test_parse_apple_health_xml_imports_metrics_and_metadata(
     health_file = await save_health_file(
         db_session,
         user_id="patient-1",
-        filename="export_cda.xml",
-        file_url="/media/health_data/patient-1/export_cda.xml",
+        filename="export.xml",
+        file_url="/media/health_data/patient-1/export.xml",
         file_type="xml",
         provider="apple_health",
     )
@@ -118,9 +184,26 @@ async def test_parse_apple_health_xml_imports_metrics_and_metadata(
         provider="apple_health",
     )
 
-    assert imported_count == 3
+    assert imported_count == 4
     assert health_file.parsed_status == "parsed"
-    assert health_file.records_imported == 3
+    assert health_file.records_imported == 4
+    assert health_file.export_locale == "en_GB"
+    assert health_file.export_date == datetime(2026, 3, 18, 20, 48, 8)
+    assert health_file.source_date_start == date(2026, 3, 17)
+    assert health_file.source_date_end == date(2026, 3, 18)
+    assert health_file.source_tag_counts == {
+        "ExportDate": 1,
+        "Me": 1,
+        "Record": 6,
+        "Workout": 1,
+        "ActivitySummary": 1,
+        "Audiogram": 1,
+    }
+    assert health_file.source_profile == {
+        "HKCharacteristicTypeIdentifierDateOfBirth": "1996-10-18",
+        "HKCharacteristicTypeIdentifierBiologicalSex": "HKBiologicalSexMale",
+        "HKCharacteristicTypeIdentifierBloodType": "HKBloodTypeOPositive",
+    }
 
     metrics = list(
         (
@@ -131,7 +214,7 @@ async def test_parse_apple_health_xml_imports_metrics_and_metadata(
         .scalars()
         .all()
     )
-    assert len(metrics) == 3
+    assert len(metrics) == 4
     assert all(metric.health_data_file_id == health_file.id for metric in metrics)
 
     heart_rate_metric = next(
@@ -141,17 +224,31 @@ async def test_parse_apple_health_xml_imports_metrics_and_metadata(
     assert heart_rate_metric.external_type == "HKQuantityTypeIdentifierHeartRate"
     assert heart_rate_metric.source_name == "Azzu's Apple Watch"
     assert heart_rate_metric.source_version == "11.5"
+    assert heart_rate_metric.source_unit == "count/min"
+    assert heart_rate_metric.source_record_count == 1
+    assert heart_rate_metric.recorded_at == datetime(2026, 3, 18, 7, 0, 0)
+    assert heart_rate_metric.source_metadata == {"HKMetadataKeyHeartRateMotionContext": "1"}
     assert heart_rate_metric.device_name == "Apple Watch"
+    assert heart_rate_metric.raw_device == "<<HKDevice: 0x1, name:Apple Watch, manufacturer:Apple Inc.>>"
 
     steps_metric = next(metric for metric in metrics if metric.metric_type == MetricType.STEPS)
-    assert steps_metric.value == 8042
+    assert steps_metric.value == 8200
     assert steps_metric.recorded_date == date(2026, 3, 18)
+    assert steps_metric.recorded_at == datetime(2026, 3, 18, 18, 15, 0)
+    assert steps_metric.source_start_at == datetime(2026, 3, 18, 9, 0, 0)
+    assert steps_metric.source_end_at == datetime(2026, 3, 18, 18, 15, 0)
+    assert steps_metric.source_record_count == 2
+
+    distance_metric = next(metric for metric in metrics if metric.metric_type == MetricType.DISTANCE_KM)
+    assert distance_metric.value == 5.375
+    assert distance_metric.source_name == "Life Fitness"
 
     sleep_metric = next(
         metric for metric in metrics if metric.metric_type == MetricType.SLEEP_HOURS
     )
-    assert sleep_metric.value == 4
+    assert sleep_metric.value == 7
     assert sleep_metric.unit == "hours"
+    assert sleep_metric.source_metadata == {"HKTimeZone": "Europe/London"}
 
 
 @pytest.mark.asyncio

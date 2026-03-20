@@ -12,6 +12,11 @@ class HealthFileUploadResponse(BaseModel):
     file_url: str
     file_type: str
     provider: str | None = None
+    export_date: datetime | None = None
+    export_locale: str | None = None
+    source_date_start: date | None = None
+    source_date_end: date | None = None
+    source_tag_counts: dict[str, int] | None = None
     parsed_status: str
     records_imported: int
     created_at: datetime
@@ -31,6 +36,7 @@ class HealthMetricResponse(BaseModel):
     value: float
     unit: str
     recorded_date: date
+    recorded_at: datetime | None = None
     source: str
     source_label: str
     provider: str | None = None
@@ -38,6 +44,11 @@ class HealthMetricResponse(BaseModel):
     external_type: str | None = None
     source_name: str | None = None
     source_version: str | None = None
+    source_unit: str | None = None
+    source_created_at: datetime | None = None
+    source_start_at: datetime | None = None
+    source_end_at: datetime | None = None
+    source_record_count: int = 1
     device_name: str | None = None
     created_at: datetime
 
@@ -133,6 +144,11 @@ class ActivityVerifiedProvider(BaseModel):
 class ActivityLatestImportedFile(BaseModel):
     filename: str
     provider: str | None = None
+    export_date: datetime | None = None
+    export_locale: str | None = None
+    source_date_start: date | None = None
+    source_date_end: date | None = None
+    source_tag_counts: dict[str, int] | None = None
     parsed_status: str
     records_imported: int
     created_at: datetime

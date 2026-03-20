@@ -22,6 +22,8 @@ import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import {
   type HealthAppProvider,
+  type HealthFileUpload,
+  type HealthMetricEntry,
   getActivityOverview,
   getAgenticProfile,
   getHealthFiles,
@@ -84,6 +86,48 @@ const metricLabels: Record<string, string> = {
   weight: "Weight",
   blood_pressure: "Blood pressure",
 };
+
+const providerLabels: Record<HealthAppProvider, string> = {
+  apple_health: "Apple Health",
+  google_fit: "Google Fitness",
+};
+
+function buildImportSourceLine(item: HealthFileUpload): string | null {
+  const parts = [
+    item.provider ? providerLabels[item.provider] : null,
+    item.export_date ? `Exported ${formatDateTime(item.export_date)}` : null,
+    item.source_date_start && item.source_date_end
+      ? `${item.source_date_start} to ${item.source_date_end}`
+      : item.source_date_start ?? item.source_date_end ?? null,
+  ].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(" • ") : null;
+}
+
+function buildImportCountLine(item: HealthFileUpload): string {
+  const parts = [
+    item.source_tag_counts?.Record
+      ? `${item.source_tag_counts.Record.toLocaleString()} Apple records`
+      : null,
+    item.source_tag_counts?.Workout
+      ? `${item.source_tag_counts.Workout} workout${item.source_tag_counts.Workout === 1 ? "" : "s"}`
+      : null,
+    item.source_tag_counts?.ActivitySummary
+      ? `${item.source_tag_counts.ActivitySummary} activity summar${item.source_tag_counts.ActivitySummary === 1 ? "y" : "ies"}`
+      : null,
+  ].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(" • ") : `${item.records_imported} imported metrics`;
+}
+
+function buildMetricMetaLine(metric: HealthMetricEntry): string | null {
+  const parts = [
+    metric.source_name ?? null,
+    metric.device_name ?? null,
+    metric.source_record_count && metric.source_record_count > 1
+      ? `${metric.source_record_count} source records`
+      : null,
+  ].filter((value): value is string => Boolean(value));
+  return parts.length > 0 ? parts.join(" • ") : null;
+}
 
 export default function ActivitySyncPage() {
   const { token, user, logout } = useRequiredAuth("patient");
@@ -351,7 +395,7 @@ export default function ActivitySyncPage() {
                             <p className={workspaceEyebrowClassName}>Upload File</p>
                             <p className="mt-2 text-sm leading-6 text-slate-400">
                               {item.provider === "apple_health"
-                                ? "Upload an Apple Health CDA XML export or a compatible CSV or JSON file to verify this source."
+                                ? "Upload your Apple Health `export.xml` file or a compatible CSV or JSON export to verify this source."
                                 : "Upload a Google Fitness CSV or JSON export to verify this source."}
                             </p>
                           </div>
@@ -445,12 +489,16 @@ export default function ActivitySyncPage() {
                         <div>
                           <p className="font-medium text-slate-100">{item.filename}</p>
                           <p className="mt-1 text-xs text-slate-500">{formatDateTime(item.created_at)}</p>
+                          {buildImportSourceLine(item) ? (
+                            <p className="mt-1 text-xs text-slate-500">{buildImportSourceLine(item)}</p>
+                          ) : null}
                         </div>
                         <div className="text-right">
                           <Badge className={item.parsed_status === "parsed" ? workspaceAccentSoftBadgeClassName : workspaceOutlineBadgeClassName}>
                             {item.parsed_status}
                           </Badge>
-                          <p className="mt-1 text-xs text-slate-500">{item.records_imported} rows</p>
+                          <p className="mt-1 text-xs text-slate-500">{item.records_imported} imported metrics</p>
+                          <p className="mt-1 text-xs text-slate-500">{buildImportCountLine(item)}</p>
                         </div>
                       </div>
                     ))
@@ -666,7 +714,12 @@ export default function ActivitySyncPage() {
                           <p className="font-medium text-slate-100">
                             {metricLabels[metric.metric_type] ?? metric.metric_type}
                           </p>
-                          <p className="mt-1 text-xs text-slate-500">{metric.recorded_date}</p>
+                          <p className="mt-1 text-xs text-slate-500">
+                            {metric.recorded_at ? formatDateTime(metric.recorded_at) : metric.recorded_date}
+                          </p>
+                          {buildMetricMetaLine(metric) ? (
+                            <p className="mt-1 text-xs text-slate-500">{buildMetricMetaLine(metric)}</p>
+                          ) : null}
                         </div>
                         <div className="text-right">
                           <p className="font-medium text-slate-100">

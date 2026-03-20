@@ -554,6 +554,11 @@ export interface HealthFileUpload {
   file_url: string;
   file_type: string;
   provider?: HealthAppProvider | null;
+  export_date?: string | null;
+  export_locale?: string | null;
+  source_date_start?: string | null;
+  source_date_end?: string | null;
+  source_tag_counts?: Record<string, number> | null;
   parsed_status: string;
   records_imported: number;
   created_at: string;
@@ -565,6 +570,7 @@ export interface HealthMetricEntry {
   value: number;
   unit: string;
   recorded_date: string;
+  recorded_at?: string | null;
   source: string;
   source_label: string;
   provider?: HealthAppProvider | null;
@@ -572,6 +578,11 @@ export interface HealthMetricEntry {
   external_type?: string | null;
   source_name?: string | null;
   source_version?: string | null;
+  source_unit?: string | null;
+  source_created_at?: string | null;
+  source_start_at?: string | null;
+  source_end_at?: string | null;
+  source_record_count?: number;
   device_name?: string | null;
   created_at: string;
 }
@@ -652,6 +663,11 @@ export interface ActivityVerifiedProvider {
 export interface ActivityLatestImportedFile {
   filename: string;
   provider?: HealthAppProvider | null;
+  export_date?: string | null;
+  export_locale?: string | null;
+  source_date_start?: string | null;
+  source_date_end?: string | null;
+  source_tag_counts?: Record<string, number> | null;
   parsed_status: string;
   records_imported: number;
   created_at: string;

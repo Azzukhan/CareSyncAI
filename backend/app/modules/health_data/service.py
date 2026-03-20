@@ -3,7 +3,7 @@ import io
 import json
 import re
 import xml.etree.ElementTree as ET
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import date, datetime, timedelta, timezone
 from html import unescape
 
@@ -29,12 +29,11 @@ SUPPORTED_HEALTH_APP_PROVIDERS = {
 }
 
 SUPPORTED_METRIC_TYPE_VALUES = {metric_type.value for metric_type in MetricType}
-APPLE_HEALTH_NAMESPACE = {"hl7": "urn:hl7-org:v3"}
 APPLE_HEALTH_TYPE_MAP: dict[str, tuple[MetricType, str]] = {
     "HKQuantityTypeIdentifierStepCount": (MetricType.STEPS, "steps"),
-    "HKQuantityTypeIdentifierWalkingStepLength": (MetricType.DISTANCE_KM, "km"),
     "HKQuantityTypeIdentifierDistanceWalkingRunning": (MetricType.DISTANCE_KM, "km"),
     "HKQuantityTypeIdentifierWalkingRunningDistance": (MetricType.DISTANCE_KM, "km"),
+    "HKQuantityTypeIdentifierDistanceCycling": (MetricType.DISTANCE_KM, "km"),
     "HKQuantityTypeIdentifierAppleExerciseTime": (MetricType.ACTIVE_MINUTES, "minutes"),
     "HKQuantityTypeIdentifierActiveEnergyBurned": (MetricType.CALORIES, "kcal"),
     "HKQuantityTypeIdentifierHeartRate": (MetricType.HEART_RATE, "bpm"),
@@ -107,13 +106,17 @@ async def parse_health_file(
     """Parse uploaded health data and create normalized HealthMetric records."""
     records_count = 0
     health_file_id = health_file.id
+    file_metadata: dict[str, object] = {}
     try:
         if health_file.file_type == "csv":
             metric_payloads = _parse_csv(file_content, provider=provider)
         elif health_file.file_type == "json":
             metric_payloads = _parse_json(file_content, provider=provider)
         elif health_file.file_type == "xml":
-            metric_payloads = _parse_apple_health_xml(file_content, provider=provider or "apple_health")
+            metric_payloads, file_metadata = _parse_apple_health_xml(
+                file_content,
+                provider=provider or "apple_health",
+            )
         else:
             metric_payloads = []
 
@@ -161,14 +164,52 @@ async def parse_health_file(
                 source=metric_source,
                 provider=provider if metric_source == MetricSource.APP else None,
                 health_data_file_id=health_file.id,
+                recorded_at=payload.get("recorded_at"),
                 external_type=payload.get("external_type"),
                 source_name=payload.get("source_name"),
                 source_version=payload.get("source_version"),
+                source_unit=payload.get("source_unit"),
+                source_created_at=payload.get("source_created_at"),
+                source_start_at=payload.get("source_start_at"),
+                source_end_at=payload.get("source_end_at"),
+                source_record_count=int(payload.get("source_record_count", 1)),
+                source_metadata=payload.get("source_metadata"),
                 device_name=payload.get("device_name"),
+                raw_device=payload.get("raw_device"),
             )
             db.add(metric)
 
         records_count = len(normalized_payloads)
+        health_file.export_date = (
+            file_metadata.get("export_date")
+            if isinstance(file_metadata.get("export_date"), datetime)
+            else None
+        )
+        health_file.export_locale = (
+            str(file_metadata["export_locale"])
+            if isinstance(file_metadata.get("export_locale"), str)
+            else None
+        )
+        health_file.source_date_start = (
+            file_metadata.get("source_date_start")
+            if isinstance(file_metadata.get("source_date_start"), date)
+            else None
+        )
+        health_file.source_date_end = (
+            file_metadata.get("source_date_end")
+            if isinstance(file_metadata.get("source_date_end"), date)
+            else None
+        )
+        health_file.source_tag_counts = (
+            dict(file_metadata["source_tag_counts"])
+            if isinstance(file_metadata.get("source_tag_counts"), dict)
+            else None
+        )
+        health_file.source_profile = (
+            dict(file_metadata["source_profile"])
+            if isinstance(file_metadata.get("source_profile"), dict)
+            else None
+        )
         health_file.parsed_status = "parsed"
         health_file.records_imported = records_count
         await db.commit()
@@ -184,6 +225,12 @@ async def parse_health_file(
             health_file.records_imported = failed_file.records_imported
             health_file.created_at = failed_file.created_at
             health_file.provider = failed_file.provider
+            health_file.export_date = failed_file.export_date
+            health_file.export_locale = failed_file.export_locale
+            health_file.source_date_start = failed_file.source_date_start
+            health_file.source_date_end = failed_file.source_date_end
+            health_file.source_tag_counts = failed_file.source_tag_counts
+            health_file.source_profile = failed_file.source_profile
         raise
     await db.refresh(health_file)
     return records_count
@@ -215,6 +262,8 @@ def _parse_csv(
                     "unit": unit,
                     "recorded_date": recorded_date,
                     "recorded_at": None,
+                    "source_unit": unit,
+                    "source_record_count": 1,
                     "provider": provider,
                 }
             )
@@ -253,6 +302,8 @@ def _parse_json(
                     "unit": unit,
                     "recorded_date": recorded_date,
                     "recorded_at": None,
+                    "source_unit": unit,
+                    "source_record_count": 1,
                     "provider": provider,
                 }
             )
@@ -265,19 +316,63 @@ def _parse_apple_health_xml(
     content: bytes,
     *,
     provider: str,
-) -> list[dict[str, object]]:
-    root = ET.fromstring(content.decode("utf-8-sig"))
-    observations = root.findall(".//hl7:observation", APPLE_HEALTH_NAMESPACE)
+) -> tuple[list[dict[str, object]], dict[str, object]]:
     payloads: list[dict[str, object]] = []
+    source_tag_counts: Counter[str] = Counter()
+    source_date_start: date | None = None
+    source_date_end: date | None = None
+    export_date: datetime | None = None
+    export_locale: str | None = None
+    source_profile: dict[str, object] | None = None
+    tag_stack: list[str] = []
+    root: ET.Element | None = None
 
-    for observation in observations:
-        payload = _extract_apple_health_observation(observation)
-        if payload is None:
+    for event, elem in ET.iterparse(io.BytesIO(content), events=("start", "end")):
+        tag = _strip_namespace(elem.tag)
+        if event == "start":
+            tag_stack.append(tag)
+            if root is None:
+                root = elem
+                export_locale = elem.attrib.get("locale")
             continue
-        payload["provider"] = provider
-        payloads.append(payload)
 
-    return payloads
+        depth = len(tag_stack)
+        if depth == 2:
+            source_tag_counts[tag] += 1
+            item_start, item_end = _extract_top_level_date_bounds(elem)
+            source_date_start, source_date_end = _merge_date_bounds(
+                source_date_start,
+                source_date_end,
+                item_start,
+                item_end,
+            )
+
+            if tag == "ExportDate":
+                parsed_export_date = _parse_apple_health_datetime(elem.attrib.get("value"))
+                if parsed_export_date is not None:
+                    export_date = parsed_export_date
+            elif tag == "Me":
+                source_profile = dict(elem.attrib) or None
+            elif tag == "Record":
+                payload = _extract_apple_health_record(elem)
+                if payload is not None:
+                    payload["provider"] = provider
+                    payloads.append(payload)
+
+            elem.clear()
+            if root is not None:
+                root.clear()
+
+        tag_stack.pop()
+
+    return payloads, {
+        "export_date": export_date,
+        "export_locale": export_locale,
+        "source_date_start": source_date_start,
+        "source_date_end": source_date_end,
+        "source_tag_counts": dict(source_tag_counts) if source_tag_counts else None,
+        "source_profile": source_profile,
+    }
 
 
 def _normalize_import_payloads(
@@ -317,7 +412,31 @@ def _normalize_import_payloads(
                 "external_type": representative.get("external_type"),
                 "source_name": representative.get("source_name"),
                 "source_version": representative.get("source_version"),
+                "source_unit": representative.get("source_unit"),
+                "source_created_at": representative.get("source_created_at"),
+                "source_start_at": min(
+                    (
+                        item.get("source_start_at")
+                        for item in group
+                        if isinstance(item.get("source_start_at"), datetime)
+                    ),
+                    default=None,
+                ),
+                "source_end_at": max(
+                    (
+                        item.get("source_end_at")
+                        for item in group
+                        if isinstance(item.get("source_end_at"), datetime)
+                    ),
+                    default=None,
+                ),
+                "source_record_count": sum(
+                    int(item.get("source_record_count", 1))
+                    for item in group
+                ),
+                "source_metadata": representative.get("source_metadata"),
                 "device_name": representative.get("device_name"),
+                "raw_device": representative.get("raw_device"),
             }
         )
 
@@ -339,55 +458,104 @@ def _parse_date(date_str: str) -> date | None:
     return None
 
 
+def _strip_namespace(tag: str) -> str:
+    if "}" in tag:
+        return tag.rsplit("}", 1)[-1]
+    return tag
+
+
 def _parse_apple_health_datetime(value: str | None) -> datetime | None:
     if not value:
         return None
     normalized = value.strip()
-    for fmt in ("%Y%m%d%H%M%S%z", "%Y%m%d%H%M%S", "%Y%m%d"):
+    for fmt in (
+        "%Y-%m-%d %H:%M:%S %z",
+        "%Y-%m-%d %H:%M:%S",
+        "%Y%m%d%H%M%S%z",
+        "%Y%m%d%H%M%S",
+        "%Y%m%d",
+    ):
         try:
-            return datetime.strptime(normalized, fmt)
+            parsed = datetime.strptime(normalized, fmt)
+            return parsed if parsed.tzinfo is not None else parsed.replace(tzinfo=timezone.utc)
         except ValueError:
             continue
     return None
 
 
-def _extract_apple_health_observation(
-    observation: ET.Element,
-) -> dict[str, object] | None:
-    text_node = observation.find("hl7:text", APPLE_HEALTH_NAMESPACE)
-    value_node = observation.find("hl7:value", APPLE_HEALTH_NAMESPACE)
-    effective_time = observation.find("hl7:effectiveTime", APPLE_HEALTH_NAMESPACE)
-    code_node = observation.find("hl7:code", APPLE_HEALTH_NAMESPACE)
+def _extract_top_level_date_bounds(elem: ET.Element) -> tuple[date | None, date | None]:
+    dates: list[date] = []
+    for attr in ("startDate", "endDate", "creationDate"):
+        parsed = _parse_apple_health_datetime(elem.attrib.get(attr))
+        if parsed is not None:
+            dates.append(parsed.date())
+    date_components = _parse_date(elem.attrib.get("dateComponents", ""))
+    if date_components is not None:
+        dates.append(date_components)
+    if not dates:
+        return None, None
+    return min(dates), max(dates)
 
-    external_type = ""
-    source_name = ""
-    source_version = ""
-    device_name = ""
-    text_value = ""
-    text_unit = ""
 
-    if text_node is not None:
-        external_type = (text_node.findtext("hl7:type", default="", namespaces=APPLE_HEALTH_NAMESPACE) or "").strip()
-        source_name = (text_node.findtext("hl7:sourceName", default="", namespaces=APPLE_HEALTH_NAMESPACE) or "").strip()
-        source_version = (text_node.findtext("hl7:sourceVersion", default="", namespaces=APPLE_HEALTH_NAMESPACE) or "").strip()
-        text_value = (text_node.findtext("hl7:value", default="", namespaces=APPLE_HEALTH_NAMESPACE) or "").strip()
-        text_unit = (text_node.findtext("hl7:unit", default="", namespaces=APPLE_HEALTH_NAMESPACE) or "").strip()
-        device_name = _extract_device_name(
-            text_node.findtext("hl7:device", default="", namespaces=APPLE_HEALTH_NAMESPACE)
-        )
+def _merge_date_bounds(
+    current_start: date | None,
+    current_end: date | None,
+    next_start: date | None,
+    next_end: date | None,
+) -> tuple[date | None, date | None]:
+    merged_start = current_start
+    merged_end = current_end
+    if next_start is not None:
+        merged_start = next_start if merged_start is None else min(merged_start, next_start)
+    if next_end is not None:
+        merged_end = next_end if merged_end is None else max(merged_end, next_end)
+    return merged_start, merged_end
 
-    if not external_type and code_node is not None:
-        code_value = code_node.attrib.get("code")
-        external_type = _map_loinc_code_to_external_type(code_value)
 
-    normalized_metric = _normalize_apple_metric(external_type, text_value, text_unit, value_node, effective_time)
-    if normalized_metric is None:
-        return None
+def _collect_metadata_entries(elem: ET.Element) -> dict[str, object] | None:
+    metadata: dict[str, object] = {}
+    for child in elem:
+        if _strip_namespace(child.tag) != "MetadataEntry":
+            continue
+        key = child.attrib.get("key", "").strip()
+        if not key:
+            continue
+        value = child.attrib.get("value", "").strip()
+        existing = metadata.get(key)
+        if existing is None:
+            metadata[key] = value
+        elif isinstance(existing, list):
+            existing.append(value)
+        else:
+            metadata[key] = [existing, value]
+    return metadata or None
 
-    recorded_at = _apple_effective_time(effective_time)
+
+def _extract_apple_health_record(record: ET.Element) -> dict[str, object] | None:
+    external_type = record.attrib.get("type", "").strip()
+    source_name = record.attrib.get("sourceName", "").strip()
+    source_version = record.attrib.get("sourceVersion", "").strip()
+    raw_value = record.attrib.get("value", "").strip()
+    raw_unit = record.attrib.get("unit", "").strip()
+    raw_device = record.attrib.get("device")
+    source_created_at = _parse_apple_health_datetime(record.attrib.get("creationDate"))
+    source_start_at = _parse_apple_health_datetime(record.attrib.get("startDate"))
+    source_end_at = _parse_apple_health_datetime(record.attrib.get("endDate"))
+    recorded_at = source_end_at or source_start_at or source_created_at
     if recorded_at is None:
         return None
 
+    normalized_metric = _normalize_apple_metric(
+        external_type,
+        raw_value,
+        raw_unit,
+        source_start_at=source_start_at,
+        source_end_at=source_end_at,
+    )
+    if normalized_metric is None:
+        return None
+
+    normalized_raw_device = unescape(raw_device).strip() if raw_device else None
     return {
         "metric_type": normalized_metric["metric_type"],
         "value": normalized_metric["value"],
@@ -397,19 +565,27 @@ def _extract_apple_health_observation(
         "external_type": external_type or None,
         "source_name": source_name or None,
         "source_version": source_version or None,
-        "device_name": device_name or None,
+        "source_unit": raw_unit or None,
+        "source_created_at": source_created_at,
+        "source_start_at": source_start_at,
+        "source_end_at": source_end_at,
+        "source_record_count": 1,
+        "source_metadata": _collect_metadata_entries(record),
+        "device_name": _extract_device_name(raw_device),
+        "raw_device": normalized_raw_device,
     }
 
 
 def _normalize_apple_metric(
     external_type: str,
-    text_value: str,
-    text_unit: str,
-    value_node: ET.Element | None,
-    effective_time: ET.Element | None,
+    raw_value: str,
+    raw_unit: str,
+    *,
+    source_start_at: datetime | None,
+    source_end_at: datetime | None,
 ) -> dict[str, object] | None:
     if external_type == "HKCategoryTypeIdentifierSleepAnalysis":
-        duration_hours = _sleep_duration_hours(effective_time, text_value)
+        duration_hours = _sleep_duration_hours(source_start_at, source_end_at, raw_value)
         if duration_hours is None:
             return None
         return {
@@ -422,8 +598,6 @@ def _normalize_apple_metric(
     if mapping is None:
         return None
 
-    raw_value = text_value or (value_node.attrib.get("value", "") if value_node is not None else "")
-    raw_unit = text_unit or (value_node.attrib.get("unit", "") if value_node is not None else "")
     try:
         numeric_value = float(raw_value)
     except (TypeError, ValueError):
@@ -475,36 +649,16 @@ def _convert_metric_value(
 
 
 def _sleep_duration_hours(
-    effective_time: ET.Element | None, raw_value: str
+    start_at: datetime | None,
+    end_at: datetime | None,
+    raw_value: str,
 ) -> float | None:
-    if raw_value and "awake" in raw_value.lower():
+    normalized_value = raw_value.lower().strip()
+    if not normalized_value or "asleep" not in normalized_value:
         return None
-    start_at = _parse_apple_health_datetime(
-        effective_time.find("hl7:low", APPLE_HEALTH_NAMESPACE).attrib.get("value")
-        if effective_time is not None and effective_time.find("hl7:low", APPLE_HEALTH_NAMESPACE) is not None
-        else None
-    )
-    end_at = _parse_apple_health_datetime(
-        effective_time.find("hl7:high", APPLE_HEALTH_NAMESPACE).attrib.get("value")
-        if effective_time is not None and effective_time.find("hl7:high", APPLE_HEALTH_NAMESPACE) is not None
-        else None
-    )
     if start_at is None or end_at is None or end_at <= start_at:
         return None
     return round((end_at - start_at).total_seconds() / 3600, 2)
-
-
-def _apple_effective_time(effective_time: ET.Element | None) -> datetime | None:
-    if effective_time is None:
-        return None
-    for tag_name in ("high", "low"):
-        node = effective_time.find(f"hl7:{tag_name}", APPLE_HEALTH_NAMESPACE)
-        if node is None:
-            continue
-        parsed = _parse_apple_health_datetime(node.attrib.get("value"))
-        if parsed is not None:
-            return parsed
-    return None
 
 
 def _extract_device_name(raw_device: str | None) -> str:
@@ -515,13 +669,6 @@ def _extract_device_name(raw_device: str | None) -> str:
     if match:
         return match.group(1).strip()
     return decoded[:255]
-
-
-def _map_loinc_code_to_external_type(code_value: str | None) -> str:
-    return {
-        "8867-4": "HKQuantityTypeIdentifierHeartRate",
-        "3141-9": "HKQuantityTypeIdentifierBodyMass",
-    }.get(code_value or "", "")
 
 
 def _round_metric_value(metric_type: MetricType, value: float) -> float:
@@ -581,6 +728,7 @@ def _collapse_candidate_metric_rows(metrics: list[HealthMetric]) -> list[dict[st
                 "value": value,
                 "unit": representative.unit,
                 "recorded_date": representative.recorded_date,
+                "recorded_at": representative.recorded_at,
                 "source": representative.source.value,
                 "source_label": _source_label(representative.source, representative.provider),
                 "provider": representative.provider,
@@ -588,6 +736,11 @@ def _collapse_candidate_metric_rows(metrics: list[HealthMetric]) -> list[dict[st
                 "external_type": representative.external_type,
                 "source_name": representative.source_name,
                 "source_version": representative.source_version,
+                "source_unit": representative.source_unit,
+                "source_created_at": representative.source_created_at,
+                "source_start_at": representative.source_start_at,
+                "source_end_at": representative.source_end_at,
+                "source_record_count": representative.source_record_count,
                 "device_name": representative.device_name,
                 "created_at": representative.created_at,
             }
@@ -846,10 +999,18 @@ def _build_health_metric(
     source: MetricSource,
     provider: str | None,
     health_data_file_id: str | None = None,
+    recorded_at: datetime | None = None,
     external_type: str | None = None,
     source_name: str | None = None,
     source_version: str | None = None,
+    source_unit: str | None = None,
+    source_created_at: datetime | None = None,
+    source_start_at: datetime | None = None,
+    source_end_at: datetime | None = None,
+    source_record_count: int = 1,
+    source_metadata: dict[str, object] | None = None,
     device_name: str | None = None,
+    raw_device: str | None = None,
 ) -> HealthMetric:
     return HealthMetric(
         user_id=user_id,
@@ -857,13 +1018,21 @@ def _build_health_metric(
         value=value,
         unit=unit,
         recorded_date=recorded_date,
+        recorded_at=recorded_at,
         source=source,
         provider=provider,
         health_data_file_id=health_data_file_id,
         external_type=external_type,
         source_name=source_name,
         source_version=source_version,
+        source_unit=source_unit,
+        source_created_at=source_created_at,
+        source_start_at=source_start_at,
+        source_end_at=source_end_at,
+        source_record_count=source_record_count,
+        source_metadata=source_metadata,
         device_name=device_name,
+        raw_device=raw_device,
     )
 
 
@@ -874,6 +1043,7 @@ def _serialize_metric(metric: HealthMetric) -> dict[str, object]:
         "value": metric.value,
         "unit": metric.unit,
         "recorded_date": metric.recorded_date,
+        "recorded_at": metric.recorded_at,
         "source": metric.source.value,
         "source_label": _source_label(metric.source, metric.provider),
         "provider": metric.provider,
@@ -881,6 +1051,11 @@ def _serialize_metric(metric: HealthMetric) -> dict[str, object]:
         "external_type": metric.external_type,
         "source_name": metric.source_name,
         "source_version": metric.source_version,
+        "source_unit": metric.source_unit,
+        "source_created_at": metric.source_created_at,
+        "source_start_at": metric.source_start_at,
+        "source_end_at": metric.source_end_at,
+        "source_record_count": metric.source_record_count,
         "device_name": metric.device_name,
         "created_at": metric.created_at,
     }
@@ -1272,6 +1447,11 @@ async def get_canonical_activity_context(
         {
             "filename": latest_import.filename,
             "provider": latest_import.provider,
+            "export_date": latest_import.export_date,
+            "export_locale": latest_import.export_locale,
+            "source_date_start": latest_import.source_date_start,
+            "source_date_end": latest_import.source_date_end,
+            "source_tag_counts": latest_import.source_tag_counts,
             "parsed_status": latest_import.parsed_status,
             "records_imported": latest_import.records_imported,
             "created_at": latest_import.created_at,
