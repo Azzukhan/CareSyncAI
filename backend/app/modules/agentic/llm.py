@@ -144,6 +144,7 @@ class AgenticLLMService:
             "If sleep is relevant, include the recorded hours explicitly.\n"
             "If the user asks about hydration but hydration is not tracked, say that clearly before giving general exercise hydration guidance.\n"
             "Return a revised weekly exercise plan when the user asks for planning or changes.\n"
+            "Every exercise item must map to a real calendar day. Prefer monday through sunday in scheduled_day, or use Day 1, Day 2, and so on for consecutive multi-day plans.\n"
             "Keep exercise names clear, durations realistic, and instructions short.\n"
             "Do not repeat the same metric in both the summary and highlights unless needed for safety.\n"
             "Output structured JSON matching the schema.\n"
@@ -178,6 +179,7 @@ class AgenticLLMService:
             "When activity source provenance is available, mention whether the recommendation is based on Apple Health or Google Fitness data when useful.\n"
             "If hydration is asked about and hydration is not tracked, say that clearly before giving general guidance.\n"
             "Return a revised weekly meal plan when the user asks for planning or changes.\n"
+            "Every meal item must map to a real calendar day. Prefer monday through sunday in scheduled_day, or use Day 1, Day 2, and so on for consecutive multi-day plans.\n"
             "Keep meals practical and explain why they fit the patient's goals.\n"
             "Do not repeat the same fact across summary and highlights.\n"
             "Output structured JSON matching the schema.\n"
@@ -263,129 +265,48 @@ def _fallback_exercise(prompt: str) -> ExerciseStructuredResponse:
     today = date.today()
     return ExerciseStructuredResponse(
         summary=(
-            f"I created a starter exercise plan based on '{prompt}'. Tell me about pain, "
-            "equipment, missed sessions, or energy levels and I can refine it."
+            f"I couldn't generate a structured exercise plan for '{prompt}' without the live AI planner. "
+            "Ask again in a moment and I will sync the real plan into your calendar once it is available."
         ),
         highlights=[
-            "Low-impact sessions are safer as a baseline.",
-            "Recovery and mobility work are included.",
-            "Use check-ins to improve tomorrow's recommendations.",
+            "No placeholder exercise sessions were inserted into your calendar.",
+            "When the planner responds, the active exercise plan will replace the previous one automatically.",
+            "You can still ask for lighter sessions, shorter durations, or injury-safe swaps.",
         ],
         suggested_follow_ups=[
-            "Change Wednesday to a lighter session",
-            "I had knee pain yesterday",
-            "Make the plan 20 minutes per session",
+            "Create a gentler plan for this week",
+            "Shorten all sessions to 20 minutes",
+            "Replace one session with a knee-safe option",
         ],
-        plan_title="Weekly Exercise Reset",
+        plan_title="Exercise Plan Pending",
         start_date=today,
         end_date=today + timedelta(days=6),
-        items=[
-            ExerciseStructuredItem(
-                title="Mobility and Stretching",
-                scheduled_day="monday",
-                target_time="07:30",
-                duration_minutes=20,
-                intensity="low",
-                instructions="Gentle full-body mobility with breathing work.",
-                details=["Warm up for 5 minutes", "Stop if sharp pain appears"],
-            ),
-            ExerciseStructuredItem(
-                title="Brisk Walk",
-                scheduled_day="wednesday",
-                target_time="18:00",
-                duration_minutes=30,
-                intensity="moderate",
-                instructions="Steady walking pace with posture focus.",
-                details=["Optional light hills", "Log pain and energy after session"],
-            ),
-            ExerciseStructuredItem(
-                title="Bodyweight Strength",
-                scheduled_day="friday",
-                target_time="07:30",
-                duration_minutes=25,
-                intensity="moderate",
-                instructions="Chair squats, wall push-ups, and band rows if available.",
-                details=["Rest as needed", "Reduce reps if fatigue rises"],
-            ),
-        ],
+        items=[],
     )
 
 
 def _fallback_diet(prompt: str) -> DietStructuredResponse:
     today = date.today()
-    weekday_names = [
-        "monday",
-        "tuesday",
-        "wednesday",
-        "thursday",
-        "friday",
-        "saturday",
-        "sunday",
-    ]
-    items: list[DietStructuredItem] = []
-    for index, weekday in enumerate(weekday_names):
-        items.extend(
-            [
-                DietStructuredItem(
-                    title="Greek yogurt, berries, and oats",
-                    meal_slot="breakfast",
-                    scheduled_day=weekday,
-                    target_time="08:00",
-                    calories=360,
-                    protein_g=24,
-                    carbs_g=42,
-                    fat_g=9,
-                    instructions="Adjust dairy choice if needed for tolerance or allergy.",
-                    details=["Add seeds for fiber", "Drink water with breakfast"],
-                ),
-                DietStructuredItem(
-                    title="Chicken, rice, and mixed vegetables",
-                    meal_slot="lunch",
-                    scheduled_day=weekday,
-                    target_time="13:00",
-                    calories=540,
-                    protein_g=38,
-                    carbs_g=56,
-                    fat_g=14,
-                    instructions="Swap protein source based on dietary preference.",
-                    details=["Keep portion moderate", "Use lower-sodium seasoning"],
-                ),
-                DietStructuredItem(
-                    title="Salmon, potatoes, and greens",
-                    meal_slot="dinner",
-                    scheduled_day=weekday,
-                    target_time="19:00",
-                    calories=610,
-                    protein_g=36,
-                    carbs_g=48,
-                    fat_g=24,
-                    instructions="Use an alternative protein if fish is unsuitable.",
-                    details=["Plate vegetables first", "Log fullness after dinner"],
-                ),
-            ]
-        )
-        if index >= 2:
-            break
 
     return DietStructuredResponse(
         summary=(
-            f"I created a starter diet plan based on '{prompt}'. Tell me what you skipped, "
-            "what caused cravings, or any allergies so I can improve it."
+            f"I couldn't generate a structured diet plan for '{prompt}' without the live AI planner. "
+            "Ask again shortly and I will sync the real meal plan into your calendar once it is available."
         ),
         highlights=[
-            "Meals are balanced around protein, fiber, and consistent timing.",
-            "You can edit single meals without replacing the whole plan.",
-            "Yesterday's adherence can be used to revise future meals.",
+            "No placeholder meals were inserted into your calendar.",
+            "When the planner responds, the active diet plan will replace the previous one automatically.",
+            "You can still ask for simpler meals, time changes, or higher-protein swaps.",
         ],
         suggested_follow_ups=[
-            "Replace one dinner with a vegetarian option",
-            "I skipped breakfast yesterday",
-            "Reduce calories and add a higher-protein lunch",
+            "Create a simpler meal plan for this week",
+            "Adjust meal timing for my work schedule",
+            "Replace one dinner with a higher-protein option",
         ],
-        plan_title="Weekly Diet Reset",
+        plan_title="Diet Plan Pending",
         start_date=today,
         end_date=today + timedelta(days=6),
-        items=items,
+        items=[],
     )
 
 

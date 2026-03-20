@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 from fastapi import HTTPException
@@ -19,11 +19,19 @@ from app.models import (
     User,
     UserRole,
 )
-from app.modules.agentic.llm import MedicalStructuredResponse, agentic_llm_service
+from app.modules.agentic.llm import (
+    DietStructuredItem,
+    DietStructuredResponse,
+    ExerciseStructuredItem,
+    ExerciseStructuredResponse,
+    MedicalStructuredResponse,
+    agentic_llm_service,
+)
 from app.modules.agentic.schemas import AgentQueryRequest, CarePlanCheckinCreateRequest
 from app.modules.agentic.service import (
     create_checkin_response,
     delete_conversation_response,
+    get_calendar_events_response,
     get_conversation_detail_response,
     list_plans_response,
     list_conversations_response,
@@ -69,6 +77,35 @@ async def create_user(session: AsyncSession, email: str) -> User:
 async def test_query_agent_creates_conversation_and_active_plan(db_session: AsyncSession) -> None:
     user = await create_user(db_session, "patient1@example.com")
 
+    async def fake_run_exercise(
+        *,
+        user_id: str,
+        prompt: str,
+        context_messages: list[dict[str, str]],
+        context_snapshot: str,
+    ) -> ExerciseStructuredResponse:
+        return ExerciseStructuredResponse(
+            summary="Structured exercise plan created.",
+            highlights=["Calendar sync preview ready."],
+            suggested_follow_ups=["Shorten Tuesday to 20 minutes"],
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=6),
+            items=[
+                ExerciseStructuredItem(
+                    title="Low-impact walk",
+                    scheduled_day="monday",
+                    target_time="08:00",
+                    duration_minutes=25,
+                    intensity="low",
+                    instructions="Walk at a conversational pace.",
+                    details=["Warm up first", "Stop if pain increases"],
+                )
+            ],
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(agentic_llm_service, "run_exercise", fake_run_exercise)
+
     response = await query_agent_response(
         db_session,
         user=user,
@@ -80,6 +117,8 @@ async def test_query_agent_creates_conversation_and_active_plan(db_session: Asyn
     assert response.data.plan is not None
     assert response.data.plan.plan_type == "exercise"
     assert len(response.data.plan.items) > 0
+    assert response.data.calendar_preview
+    assert response.data.calendar_preview[0].details == {"bullets": ["Warm up first", "Stop if pain increases"]}
 
     detail = await get_conversation_detail_response(
         db_session,
@@ -89,6 +128,132 @@ async def test_query_agent_creates_conversation_and_active_plan(db_session: Asyn
     assert detail.agent == CareAgentType.EXERCISE
     assert len(detail.messages) == 1
     assert detail.messages[0].response_data is not None
+    monkeypatch.undo()
+
+
+@pytest.mark.asyncio
+async def test_exercise_plan_without_weekdays_syncs_to_calendar(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await create_user(db_session, "patient11@example.com")
+    start_date = date.today()
+    end_date = start_date + timedelta(days=6)
+
+    async def fake_run_exercise(
+        *,
+        user_id: str,
+        prompt: str,
+        context_messages: list[dict[str, str]],
+        context_snapshot: str,
+    ) -> ExerciseStructuredResponse:
+        return ExerciseStructuredResponse(
+            summary="A seven-day exercise plan was created.",
+            highlights=[],
+            suggested_follow_ups=[],
+            start_date=start_date,
+            end_date=end_date,
+            items=[
+                ExerciseStructuredItem(
+                    title=f"Session {index + 1}",
+                    scheduled_day="",
+                    target_time="09:00",
+                    duration_minutes=20 + index,
+                    intensity="low",
+                    instructions="Keep it manageable.",
+                    details=[],
+                )
+                for index in range(7)
+            ],
+        )
+
+    monkeypatch.setattr(agentic_llm_service, "run_exercise", fake_run_exercise)
+
+    response = await query_agent_response(
+        db_session,
+        user=user,
+        payload=AgentQueryRequest(prompt="Build a 7 day plan", agent=CareAgentType.EXERCISE),
+    )
+
+    assert response.data.plan is not None
+    assert [item.scheduled_date for item in response.data.plan.items] == [
+        start_date + timedelta(days=index) for index in range(7)
+    ]
+    assert len(response.data.calendar_preview) == 7
+
+    calendar_items = await get_calendar_events_response(
+        db_session,
+        user=user,
+        plan_type=CarePlanType.EXERCISE,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    assert [item.scheduled_for for item in calendar_items] == [
+        start_date + timedelta(days=index) for index in range(7)
+    ]
+
+
+@pytest.mark.asyncio
+async def test_diet_plan_day_labels_sync_to_calendar(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await create_user(db_session, "patient12@example.com")
+    start_date = date.today()
+    end_date = start_date + timedelta(days=2)
+
+    async def fake_run_diet(
+        *,
+        user_id: str,
+        prompt: str,
+        context_messages: list[dict[str, str]],
+        context_snapshot: str,
+    ) -> DietStructuredResponse:
+        return DietStructuredResponse(
+            summary="A three-day diet plan was created.",
+            highlights=[],
+            suggested_follow_ups=[],
+            start_date=start_date,
+            end_date=end_date,
+            items=[
+                DietStructuredItem(
+                    title=f"Meal {index + 1}",
+                    meal_slot="breakfast",
+                    scheduled_day=f"Day {index + 1}",
+                    target_time="08:00",
+                    calories=350 + index * 10,
+                    protein_g=20,
+                    carbs_g=35,
+                    fat_g=12,
+                    instructions="Simple breakfast.",
+                    details=[],
+                )
+                for index in range(3)
+            ],
+        )
+
+    monkeypatch.setattr(agentic_llm_service, "run_diet", fake_run_diet)
+
+    response = await query_agent_response(
+        db_session,
+        user=user,
+        payload=AgentQueryRequest(prompt="Build a 3 day diet plan", agent=CareAgentType.DIET),
+    )
+
+    assert response.data.plan is not None
+    assert [item.scheduled_date for item in response.data.plan.items] == [
+        start_date + timedelta(days=index) for index in range(3)
+    ]
+    assert len(response.data.calendar_preview) == 3
+
+    calendar_items = await get_calendar_events_response(
+        db_session,
+        user=user,
+        plan_type=CarePlanType.DIET,
+        start_date=start_date,
+        end_date=end_date,
+    )
+    assert [item.scheduled_for for item in calendar_items] == [
+        start_date + timedelta(days=index) for index in range(3)
+    ]
 
 
 @pytest.mark.asyncio
@@ -113,6 +278,37 @@ async def test_conversation_access_is_scoped_to_authenticated_user(db_session: A
 @pytest.mark.asyncio
 async def test_checkin_updates_yesterday_summary(db_session: AsyncSession) -> None:
     user = await create_user(db_session, "patient4@example.com")
+
+    async def fake_run_exercise(
+        *,
+        user_id: str,
+        prompt: str,
+        context_messages: list[dict[str, str]],
+        context_snapshot: str,
+    ) -> ExerciseStructuredResponse:
+        weekday = date.today().strftime("%A").lower()
+        return ExerciseStructuredResponse(
+            summary="Today's exercise plan created.",
+            highlights=[],
+            suggested_follow_ups=[],
+            start_date=date.today(),
+            end_date=date.today() + timedelta(days=6),
+            items=[
+                ExerciseStructuredItem(
+                    title="Mobility work",
+                    scheduled_day=weekday,
+                    target_time="07:30",
+                    duration_minutes=20,
+                    intensity="low",
+                    instructions="Gentle mobility sequence.",
+                    details=["Keep movements smooth"],
+                )
+            ],
+        )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(agentic_llm_service, "run_exercise", fake_run_exercise)
+
     response = await query_agent_response(
         db_session,
         user=user,
@@ -143,6 +339,199 @@ async def test_checkin_updates_yesterday_summary(db_session: AsyncSession) -> No
     returned_item = next(item for item in plans[0].items if item.id == tracked_item.id)
     assert returned_item.latest_checkin is not None
     assert returned_item.latest_checkin.checkin_date == checkin_date
+    monkeypatch.undo()
+
+
+@pytest.mark.asyncio
+async def test_exercise_agent_revision_replaces_calendar_values(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await create_user(db_session, "patient9@example.com")
+
+    exercise_versions = iter(
+        [
+            ExerciseStructuredResponse(
+                summary="Initial exercise plan created.",
+                highlights=[],
+                suggested_follow_ups=[],
+                plan_title="Exercise Week 1",
+                start_date=date.today(),
+                end_date=date.today() + timedelta(days=6),
+                items=[
+                    ExerciseStructuredItem(
+                        title="Brisk walk",
+                        scheduled_day="monday",
+                        target_time="08:00",
+                        duration_minutes=30,
+                        intensity="moderate",
+                        instructions="Steady walking pace.",
+                        details=["Track knee comfort"],
+                    )
+                ],
+            ),
+            ExerciseStructuredResponse(
+                summary="Revised exercise plan created.",
+                highlights=[],
+                suggested_follow_ups=[],
+                plan_title="Exercise Week 2",
+                start_date=date.today(),
+                end_date=date.today() + timedelta(days=6),
+                items=[
+                    ExerciseStructuredItem(
+                        title="Gentle cycling",
+                        scheduled_day="tuesday",
+                        target_time="09:15",
+                        duration_minutes=20,
+                        intensity="low",
+                        instructions="Keep cadence easy.",
+                        details=["Use flat resistance"],
+                    )
+                ],
+            ),
+        ]
+    )
+
+    async def fake_run_exercise(
+        *,
+        user_id: str,
+        prompt: str,
+        context_messages: list[dict[str, str]],
+        context_snapshot: str,
+    ) -> ExerciseStructuredResponse:
+        return next(exercise_versions)
+
+    monkeypatch.setattr(agentic_llm_service, "run_exercise", fake_run_exercise)
+
+    first = await query_agent_response(
+        db_session,
+        user=user,
+        payload=AgentQueryRequest(prompt="Create my exercise plan", agent=CareAgentType.EXERCISE),
+    )
+    assert first.data.plan is not None
+    assert first.data.plan.version == 1
+
+    second = await query_agent_response(
+        db_session,
+        user=user,
+        payload=AgentQueryRequest(
+            prompt="Make it lighter and move it to Tuesday morning",
+            agent=CareAgentType.EXERCISE,
+            conversation_id=first.conversation_id,
+        ),
+    )
+    assert second.data.plan is not None
+    assert second.data.plan.version == 2
+    assert second.data.plan.items[0].title == "Gentle cycling"
+
+    calendar_items = await get_calendar_events_response(
+        db_session,
+        user=user,
+        plan_type=CarePlanType.EXERCISE,
+        start_date=date.today(),
+        end_date=date.today() + timedelta(days=6),
+    )
+    assert calendar_items
+    assert any(item.title == "Gentle cycling" and item.target_time == "09:15" for item in calendar_items)
+    assert all(item.title != "Brisk walk" for item in calendar_items)
+
+
+@pytest.mark.asyncio
+async def test_diet_agent_revision_replaces_calendar_values(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    user = await create_user(db_session, "patient10@example.com")
+
+    diet_versions = iter(
+        [
+            DietStructuredResponse(
+                summary="Initial diet plan created.",
+                highlights=[],
+                suggested_follow_ups=[],
+                plan_title="Diet Week 1",
+                start_date=date.today(),
+                end_date=date.today() + timedelta(days=6),
+                items=[
+                    DietStructuredItem(
+                        title="Oats and berries",
+                        meal_slot="breakfast",
+                        scheduled_day="monday",
+                        target_time="08:00",
+                        calories=380,
+                        protein_g=20,
+                        carbs_g=48,
+                        fat_g=10,
+                        instructions="Add yogurt if tolerated.",
+                        details=["Drink water first"],
+                    )
+                ],
+            ),
+            DietStructuredResponse(
+                summary="Revised diet plan created.",
+                highlights=[],
+                suggested_follow_ups=[],
+                plan_title="Diet Week 2",
+                start_date=date.today(),
+                end_date=date.today() + timedelta(days=6),
+                items=[
+                    DietStructuredItem(
+                        title="Egg wrap and fruit",
+                        meal_slot="breakfast",
+                        scheduled_day="monday",
+                        target_time="09:00",
+                        calories=410,
+                        protein_g=28,
+                        carbs_g=35,
+                        fat_g=16,
+                        instructions="Keep the wrap simple for work mornings.",
+                        details=["Pack fruit the night before"],
+                    )
+                ],
+            ),
+        ]
+    )
+
+    async def fake_run_diet(
+        *,
+        user_id: str,
+        prompt: str,
+        context_messages: list[dict[str, str]],
+        context_snapshot: str,
+    ) -> DietStructuredResponse:
+        return next(diet_versions)
+
+    monkeypatch.setattr(agentic_llm_service, "run_diet", fake_run_diet)
+
+    first = await query_agent_response(
+        db_session,
+        user=user,
+        payload=AgentQueryRequest(prompt="Create my diet plan", agent=CareAgentType.DIET),
+    )
+    assert first.data.plan is not None
+    assert first.data.plan.version == 1
+
+    second = await query_agent_response(
+        db_session,
+        user=user,
+        payload=AgentQueryRequest(
+            prompt="Change breakfast for busy mornings",
+            agent=CareAgentType.DIET,
+            conversation_id=first.conversation_id,
+        ),
+    )
+    assert second.data.plan is not None
+    assert second.data.plan.version == 2
+    assert second.data.plan.items[0].title == "Egg wrap and fruit"
+
+    calendar_items = await get_calendar_events_response(
+        db_session,
+        user=user,
+        plan_type=CarePlanType.DIET,
+        start_date=date.today(),
+        end_date=date.today() + timedelta(days=6),
+    )
+    assert calendar_items
+    assert any(item.title == "Egg wrap and fruit" and item.target_time == "09:00" for item in calendar_items)
+    assert all(item.title != "Oats and berries" for item in calendar_items)
 
 
 @pytest.mark.asyncio

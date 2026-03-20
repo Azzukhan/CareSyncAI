@@ -21,7 +21,7 @@ import {
   workspacePrimaryButtonClassName,
   workspaceSecondaryButtonClassName,
 } from "@/components/workspace/workspaceTheme";
-import { type CarePlanType, getAgenticCalendar } from "@/lib/api";
+import { type AgentCalendarEvent, type CarePlanType, getAgenticCalendar } from "@/lib/api";
 import { useRequiredAuth } from "@/lib/auth";
 import { cn, formatDate } from "@/lib/utils";
 
@@ -48,6 +48,130 @@ function buildMonthGrid(currentDate: Date): Date[] {
     next.setDate(start.getDate() + index);
     return next;
   });
+}
+
+function eventDetailBullets(details: Record<string, unknown> | null | undefined): string[] {
+  const raw = details?.bullets;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function eventDetailMetrics(event: AgentCalendarEvent): string[] {
+  const details = event.details;
+  const metrics: string[] = [];
+  if (event.duration_minutes) {
+    metrics.push(`${event.duration_minutes} min`);
+  }
+  if (event.calories) {
+    metrics.push(`${Math.round(event.calories)} kcal`);
+  }
+  if (event.intensity) {
+    metrics.push(event.intensity);
+  }
+  if (typeof details?.protein_g === "number") {
+    metrics.push(`${Math.round(details.protein_g)}g protein`);
+  }
+  if (typeof details?.carbs_g === "number") {
+    metrics.push(`${Math.round(details.carbs_g)}g carbs`);
+  }
+  if (typeof details?.fat_g === "number") {
+    metrics.push(`${Math.round(details.fat_g)}g fat`);
+  }
+  return metrics;
+}
+
+function DayPlanCard({
+  title,
+  dayKey,
+  events,
+  emptyMessage,
+  className,
+}: {
+  title: string;
+  dayKey: string;
+  events: AgentCalendarEvent[];
+  emptyMessage: string;
+  className?: string;
+}) {
+  return (
+    <Card className={cn("flex min-h-0 flex-col", workspaceCardClassName, className)}>
+      <CardHeader>
+        <div className="flex items-center justify-between gap-3">
+          <CardTitle className="text-base">{title}</CardTitle>
+          <Badge variant="outline" className={workspaceAccentSoftBadgeClassName}>
+            {events.length} item{events.length === 1 ? "" : "s"}
+          </Badge>
+        </div>
+      </CardHeader>
+      <CardContent className="flex min-h-0 flex-1 flex-col space-y-3">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+          <p className="text-sm font-medium">{formatDate(dayKey)}</p>
+          <p className="mt-1 text-xs text-slate-500">
+            {events.length ? "Synced from the active care plan." : emptyMessage}
+          </p>
+        </div>
+        <ScrollArea className="min-h-0 flex-1 pr-3">
+          <div className="space-y-2">
+            {events.length === 0 ? (
+              <p className="text-sm text-slate-400">{emptyMessage}</p>
+            ) : (
+              events.map((event) => {
+                const detailBullets = eventDetailBullets(event.details);
+                const detailMetrics = eventDetailMetrics(event);
+                return (
+                  <div
+                    key={event.id}
+                    className="rounded-2xl border border-white/10 bg-white/[0.03] p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="font-medium">{event.title}</p>
+                        <p className="mt-1 text-xs text-slate-500">
+                          {[event.meal_slot, event.target_time].filter(Boolean).join(" • ") || "Time not set"}
+                        </p>
+                      </div>
+                      {event.status ? (
+                        <Badge variant="outline" className="border-white/10 text-slate-300">
+                          {event.status}
+                        </Badge>
+                      ) : null}
+                    </div>
+                    {detailMetrics.length ? (
+                      <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-400">
+                        {detailMetrics.map((metric) => (
+                          <span
+                            key={`${event.id}-${metric}`}
+                            className="inline-flex items-center gap-1 rounded-full border border-white/10 px-2 py-1"
+                          >
+                            <Clock3 className="h-3 w-3" /> {metric}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                    {event.instructions ? (
+                      <p className="mt-3 text-sm text-slate-300">{event.instructions}</p>
+                    ) : null}
+                    {detailBullets.length ? (
+                      <ul className="mt-3 space-y-2 text-xs text-slate-300">
+                        {detailBullets.map((detail) => (
+                          <li key={`${event.id}-${detail}`} className="flex items-start gap-2">
+                            <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" />
+                            <span>{detail}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </ScrollArea>
+      </CardContent>
+    </Card>
+  );
 }
 
 export default function AgentCalendarPage({
@@ -80,6 +204,8 @@ export default function AgentCalendarPage({
   }, [calendarQuery.data]);
 
   const selectedEvents = eventsByDate.get(selectedDate) ?? [];
+  const todayKey = toDateString(new Date());
+  const todayEvents = eventsByDate.get(todayKey) ?? [];
   const monthLabel = currentDate.toLocaleDateString("en-GB", { month: "long", year: "numeric" });
 
   return (
@@ -188,58 +314,23 @@ export default function AgentCalendarPage({
         </Card>
 
         <div className="flex min-h-0 flex-col gap-3">
-          <Card className={cn("flex min-h-0 flex-1 flex-col", workspaceCardClassName)}>
-            <CardHeader>
-              <CardTitle className="text-base">Selected Day</CardTitle>
-            </CardHeader>
-            <CardContent className="flex min-h-0 flex-1 flex-col space-y-3">
-              <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-sm font-medium">{formatDate(selectedDate)}</p>
-                <p className="mt-1 text-xs text-slate-500">
-                  {selectedEvents.length} planned item{selectedEvents.length === 1 ? "" : "s"}
-                </p>
-              </div>
-              <ScrollArea className="min-h-0 flex-1 pr-3">
-                <div className="space-y-2">
-                  {selectedEvents.length === 0 ? (
-                    <p className="text-sm text-slate-400">
-                      Nothing scheduled for this date yet.
-                    </p>
-                  ) : (
-                    selectedEvents.map((event) => (
-                      <div key={event.id} className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="font-medium">{event.title}</p>
-                            <p className="mt-1 text-xs text-slate-500">
-                              {[event.meal_slot, event.target_time].filter(Boolean).join(" • ")}
-                            </p>
-                          </div>
-                          {event.status ? (
-                            <Badge variant="outline" className="border-white/10 text-slate-300">
-                              {event.status}
-                            </Badge>
-                          ) : null}
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2 text-xs text-slate-400">
-                          {event.duration_minutes ? (
-                            <span className="inline-flex items-center gap-1">
-                              <Clock3 className="h-3 w-3" /> {event.duration_minutes} min
-                            </span>
-                          ) : null}
-                          {event.calories ? <span>{Math.round(event.calories)} kcal</span> : null}
-                          {event.intensity ? <span>{event.intensity}</span> : null}
-                        </div>
-                        {event.instructions ? (
-                          <p className="mt-3 text-sm text-slate-300">{event.instructions}</p>
-                        ) : null}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </ScrollArea>
-            </CardContent>
-          </Card>
+          <DayPlanCard
+            title="Today's Plan"
+            dayKey={todayKey}
+            events={todayEvents}
+            emptyMessage="Nothing is scheduled for today yet."
+            className={selectedDate === todayKey ? "flex-1" : undefined}
+          />
+
+          {selectedDate !== todayKey ? (
+            <DayPlanCard
+              title="Selected Day"
+              dayKey={selectedDate}
+              events={selectedEvents}
+              emptyMessage="Nothing is scheduled for this date yet."
+              className="max-h-[24rem]"
+            />
+          ) : null}
 
           <Card className={workspaceCardClassName}>
             <CardHeader>

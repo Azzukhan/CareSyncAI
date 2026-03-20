@@ -1,4 +1,5 @@
 import json
+import re
 from datetime import date, datetime, timedelta, timezone
 from typing import cast
 
@@ -30,7 +31,6 @@ from app.models import (
 from app.modules.agentic.llm import (
     DietStructuredResponse,
     ExerciseStructuredResponse,
-    MedicalStructuredResponse,
     agentic_llm_service,
 )
 from app.modules.health_data.service import (
@@ -65,6 +65,7 @@ WEEKDAY_INDEX = {
     "saturday": 5,
     "sunday": 6,
 }
+DAY_SEQUENCE_PATTERN = re.compile(r"\bday\s*([1-9]\d*)\b", re.IGNORECASE)
 
 
 def _utcnow() -> datetime:
@@ -76,6 +77,106 @@ def _slug_weekday(value: str | None) -> str | None:
         return None
     normalized = value.strip().lower()
     return normalized if normalized in WEEKDAY_INDEX else None
+
+
+def _extract_weekday(value: str | None) -> str | None:
+    if not value:
+        return None
+    normalized = re.sub(r"[^a-z]+", " ", value.strip().lower())
+    for weekday in WEEKDAY_INDEX:
+        if re.search(rf"\b{weekday}\b", normalized):
+            return weekday
+    return None
+
+
+def _parse_schedule_date_token(value: str | None, *, plan_start: date) -> date | None:
+    if not value:
+        return None
+    normalized = value.strip()
+    if not normalized:
+        return None
+    lowered = normalized.lower()
+    if lowered == "today":
+        return plan_start
+    if lowered == "tomorrow":
+        return plan_start + timedelta(days=1)
+    if lowered == "day after tomorrow":
+        return plan_start + timedelta(days=2)
+    try:
+        return date.fromisoformat(normalized)
+    except ValueError:
+        pass
+    match = DAY_SEQUENCE_PATTERN.search(lowered.replace("-", " "))
+    if match is None:
+        return None
+    offset = max(0, int(match.group(1)) - 1)
+    return plan_start + timedelta(days=offset)
+
+
+def _plan_span_days(start_date: date, end_date: date | None) -> int:
+    effective_end = end_date or start_date
+    return max(1, (effective_end - start_date).days + 1)
+
+
+def _sequenced_schedule_date(
+    *,
+    start_date: date,
+    end_date: date | None,
+    order_index: int,
+    total_items: int,
+) -> date | None:
+    if order_index < 0 or total_items <= 0:
+        return None
+    span_days = _plan_span_days(start_date, end_date)
+    if total_items <= span_days:
+        return start_date + timedelta(days=min(order_index, span_days - 1))
+    if total_items % span_days == 0:
+        items_per_day = total_items // span_days
+        if items_per_day > 0:
+            return start_date + timedelta(
+                days=min(order_index // items_per_day, span_days - 1)
+            )
+    return start_date + timedelta(
+        days=min(int(order_index * span_days / total_items), span_days - 1)
+    )
+
+
+def _resolve_schedule_fields(
+    *,
+    scheduled_day: str | None,
+    scheduled_date: date | None,
+    start_date: date,
+    end_date: date | None,
+    order_index: int,
+    total_items: int,
+) -> tuple[str | None, date | None]:
+    resolved_weekday = _slug_weekday(scheduled_day) or _extract_weekday(scheduled_day)
+    if scheduled_date is not None:
+        return resolved_weekday, scheduled_date
+    if resolved_weekday is not None:
+        return resolved_weekday, None
+    resolved_date = _parse_schedule_date_token(scheduled_day, plan_start=start_date)
+    if resolved_date is not None:
+        return None, resolved_date
+    return None, _sequenced_schedule_date(
+        start_date=start_date,
+        end_date=end_date,
+        order_index=order_index,
+        total_items=total_items,
+    )
+
+
+def _resolved_item_schedule(item: CarePlanItem) -> tuple[str | None, date | None]:
+    active_items = [candidate for candidate in item.plan.items if candidate.is_active]
+    total_items = max(1, len(active_items))
+    return _resolve_schedule_fields(
+        scheduled_day=item.scheduled_day,
+        scheduled_date=item.scheduled_date,
+        start_date=item.plan.start_date,
+        end_date=item.plan.end_date,
+        order_index=item.order_index,
+        total_items=total_items,
+    )
 
 
 def _parse_list(value: str | None) -> list[str]:
@@ -232,9 +333,9 @@ def _map_override(override: CarePlanItemOverride) -> CarePlanItemOverrideRespons
 
 
 def _matches_item_on_date(item: CarePlanItem, target_date: date) -> bool:
-    if item.scheduled_date is not None:
-        return item.scheduled_date == target_date
-    weekday = _slug_weekday(item.scheduled_day)
+    weekday, scheduled_date = _resolved_item_schedule(item)
+    if scheduled_date is not None:
+        return scheduled_date == target_date
     if weekday is None:
         return False
     return target_date.weekday() == WEEKDAY_INDEX[weekday]
@@ -277,12 +378,13 @@ def _latest_checkin(item: CarePlanItem) -> CarePlanCheckin | None:
 
 def _map_plan_item(item: CarePlanItem) -> CarePlanItemResponse:
     active_overrides = [override for override in item.overrides if not override.is_deleted]
+    scheduled_day, scheduled_date = _resolved_item_schedule(item)
     return CarePlanItemResponse(
         id=item.id,
         item_type=item.item_type,
         title=item.title,
-        scheduled_day=item.scheduled_day,
-        scheduled_date=item.scheduled_date,
+        scheduled_day=scheduled_day,
+        scheduled_date=scheduled_date,
         meal_slot=item.meal_slot,
         target_time=item.target_time,
         duration_minutes=item.duration_minutes,
@@ -340,6 +442,7 @@ def _occurrence_payload(
     instructions = (
         override.instructions if override and override.instructions else item.instructions
     )
+    details = override.details if override and override.details is not None else item.details
     checkin = _checkin_for_date(item, target_date)
 
     return AgentCalendarEventResponse(
@@ -355,6 +458,7 @@ def _occurrence_payload(
         duration_minutes=duration_minutes,
         calories=calories,
         instructions=instructions,
+        details=cast(dict[str, object] | None, details),
         status=checkin.status if checkin else None,
         source="override" if override is not None else "plan",
     )
@@ -662,14 +766,24 @@ async def _persist_plan_from_exercise_response(
     db.add(plan)
     await db.flush()
 
+    total_items = max(1, len(response.items))
     for order_index, item in enumerate(response.items):
+        scheduled_day, scheduled_date = _resolve_schedule_fields(
+            scheduled_day=item.scheduled_day,
+            scheduled_date=None,
+            start_date=response.start_date,
+            end_date=response.end_date,
+            order_index=order_index,
+            total_items=total_items,
+        )
         db.add(
             CarePlanItem(
                 plan_id=plan.id,
                 user_id=user.id,
                 item_type=CarePlanItemType.EXERCISE,
                 title=item.title,
-                scheduled_day=_slug_weekday(item.scheduled_day),
+                scheduled_day=scheduled_day,
+                scheduled_date=scheduled_date,
                 target_time=item.target_time,
                 duration_minutes=item.duration_minutes,
                 intensity=item.intensity,
@@ -718,14 +832,24 @@ async def _persist_plan_from_diet_response(
     db.add(plan)
     await db.flush()
 
+    total_items = max(1, len(response.items))
     for order_index, item in enumerate(response.items):
+        scheduled_day, scheduled_date = _resolve_schedule_fields(
+            scheduled_day=item.scheduled_day,
+            scheduled_date=None,
+            start_date=response.start_date,
+            end_date=response.end_date,
+            order_index=order_index,
+            total_items=total_items,
+        )
         db.add(
             CarePlanItem(
                 plan_id=plan.id,
                 user_id=user.id,
                 item_type=CarePlanItemType.MEAL,
                 title=item.title,
-                scheduled_day=_slug_weekday(item.scheduled_day),
+                scheduled_day=scheduled_day,
+                scheduled_date=scheduled_date,
                 meal_slot=item.meal_slot,
                 target_time=item.target_time,
                 calories=item.calories,
@@ -1028,7 +1152,11 @@ async def update_plan_item_response(
     item = await db.scalar(
         select(CarePlanItem)
         .where(CarePlanItem.id == item_id, CarePlanItem.user_id == user.id)
-        .options(selectinload(CarePlanItem.overrides), selectinload(CarePlanItem.checkins))
+        .options(
+            selectinload(CarePlanItem.overrides),
+            selectinload(CarePlanItem.checkins),
+            selectinload(CarePlanItem.plan).selectinload(CarePlan.items),
+        )
     )
     assert item is not None
     return _map_plan_item(item)

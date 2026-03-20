@@ -130,6 +130,7 @@ class AgentCalendarEventResponse(BaseModel):
     duration_minutes: int | None = None
     calories: float | None = None
     instructions: str | None = None
+    details: dict[str, object] | None = None
     status: CarePlanCheckinStatus | None = None
     source: str = "plan"
 

@@ -1083,6 +1083,7 @@ export interface AgentCalendarEvent {
   duration_minutes?: number | null;
   calories?: number | null;
   instructions?: string | null;
+  details?: Record<string, unknown> | null;
   status?: CarePlanCheckinStatus | null;
   source: string;
 }

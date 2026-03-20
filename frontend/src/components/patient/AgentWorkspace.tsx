@@ -43,6 +43,7 @@ import {
   workspaceTabTriggerClassName,
 } from "@/components/workspace/workspaceTheme";
 import {
+  type AgentCalendarEvent,
   type AgentQueryResult,
   type CareAgentType,
   type CarePlanType,
@@ -89,11 +90,12 @@ interface AgentWorkspaceProps {
   planType?: CarePlanType;
 }
 
-type ChatPanelKey = "summary" | "plan";
+type ChatPanelKey = "summary" | "plan" | "calendar";
 
 const panelLabels: Record<ChatPanelKey, string> = {
   summary: "Summary",
   plan: "Plan",
+  calendar: "Calendar",
 };
 
 const profileFieldClassName = workspaceInputClassName;
@@ -189,6 +191,32 @@ function getAgentIdentity(agent: CareAgentType) {
   }
 }
 
+function eventDetailBullets(details: Record<string, unknown> | null | undefined): string[] {
+  const raw = details?.bullets;
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  return raw.filter((item): item is string => typeof item === "string" && item.trim().length > 0);
+}
+
+function eventDetailMetrics(event: AgentCalendarEvent): string[] {
+  const details = event.details;
+  const metrics: string[] = [];
+  if (event.intensity) {
+    metrics.push(event.intensity);
+  }
+  if (typeof details?.protein_g === "number") {
+    metrics.push(`${Math.round(details.protein_g)}g protein`);
+  }
+  if (typeof details?.carbs_g === "number") {
+    metrics.push(`${Math.round(details.carbs_g)}g carbs`);
+  }
+  if (typeof details?.fat_g === "number") {
+    metrics.push(`${Math.round(details.fat_g)}g fat`);
+  }
+  return metrics;
+}
+
 function ConversationPanels({
   agent,
   message,
@@ -198,15 +226,20 @@ function ConversationPanels({
 }) {
   const responseData = message.responseData;
   if (!responseData) return null;
-  const visiblePanels: ChatPanelKey[] =
-    agent === "medical"
-      ? ["summary"]
-      : responseData.plan
-        ? ["summary", "plan"]
-        : ["summary"];
+  const visiblePanels: ChatPanelKey[] = ["summary"];
+  if (agent !== "medical" && responseData.plan) {
+    visiblePanels.push("plan");
+  }
+  if (responseData.calendar_preview.length > 0) {
+    visiblePanels.push("calendar");
+  }
 
   const defaultValue: ChatPanelKey =
-    message.preferredPanel === "plan" && visiblePanels.includes("plan") ? "plan" : "summary";
+    message.preferredPanel === "calendar" && visiblePanels.includes("calendar")
+      ? "calendar"
+      : message.preferredPanel === "plan" && visiblePanels.includes("plan")
+        ? "plan"
+        : "summary";
 
   const summaryText = responseData.summary?.trim() || message.text;
   const summaryPanel = (
@@ -257,7 +290,11 @@ function ConversationPanels({
               <div>
                 <p className="font-medium">{item.title}</p>
                 <p className="text-xs text-slate-400">
-                  {[item.scheduled_day, item.meal_slot, item.target_time]
+                  {[
+                    item.scheduled_date ? formatDate(item.scheduled_date) : item.scheduled_day,
+                    item.meal_slot,
+                    item.target_time,
+                  ]
                     .filter(Boolean)
                     .join(" • ")}
                 </p>
@@ -283,13 +320,81 @@ function ConversationPanels({
     <p className="mt-4 text-sm text-slate-400">No structured plan attached to this reply.</p>
   );
 
+  const calendarPanel = responseData.calendar_preview.length ? (
+    <div className="space-y-2">
+      {responseData.calendar_preview.map((event) => {
+        const detailBullets = eventDetailBullets(event.details);
+        const detailMetrics = eventDetailMetrics(event);
+        return (
+          <div
+            key={event.id}
+            className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="font-medium">{event.title}</p>
+                <p className="text-xs text-slate-400">
+                  {[formatDate(event.scheduled_for), event.meal_slot, event.target_time]
+                    .filter(Boolean)
+                    .join(" • ")}
+                </p>
+              </div>
+              {event.duration_minutes ? (
+                <Badge variant="outline" className="border-white/10 text-slate-300">
+                  {event.duration_minutes} min
+                </Badge>
+              ) : event.calories ? (
+                <Badge variant="outline" className="border-white/10 text-slate-300">
+                  {Math.round(event.calories)} kcal
+                </Badge>
+              ) : null}
+            </div>
+            {event.instructions ? (
+              <p className="mt-2 text-xs text-slate-400">{event.instructions}</p>
+            ) : null}
+            {detailMetrics.length ? (
+              <div className="mt-3 flex flex-wrap gap-2 text-[11px] text-slate-400">
+                {detailMetrics.map((metric) => (
+                  <span
+                    key={`${event.id}-${metric}`}
+                    className="rounded-full border border-white/10 px-2 py-1"
+                  >
+                    {metric}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+            {detailBullets.length ? (
+              <ul className="mt-3 space-y-2 text-xs text-slate-300">
+                {detailBullets.map((detail) => (
+                  <li key={`${event.id}-${detail}`} className="flex items-start gap-2">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-300" />
+                    <span>{detail}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  ) : (
+    <p className="mt-4 text-sm text-slate-400">No synced calendar events attached to this reply.</p>
+  );
+
   if (visiblePanels.length === 1) {
     return <div className="mt-4">{summaryPanel}</div>;
   }
 
   return (
     <Tabs defaultValue={defaultValue} className="mt-4">
-      <TabsList className={cn("grid w-full grid-cols-2", workspaceTabListClassName)}>
+      <TabsList
+        className={cn(
+          "grid w-full",
+          visiblePanels.length === 2 ? "grid-cols-2" : "grid-cols-3",
+          workspaceTabListClassName,
+        )}
+      >
         {visiblePanels.map((value) => (
           <TabsTrigger key={value} value={value} className={cn("text-[11px]", workspaceTabTriggerClassName)}>
             {panelLabels[value]}
@@ -303,6 +408,10 @@ function ConversationPanels({
 
       <TabsContent value="plan" className="mt-4">
         {planPanel}
+      </TabsContent>
+
+      <TabsContent value="calendar" className="mt-4">
+        {calendarPanel}
       </TabsContent>
     </Tabs>
   );
@@ -802,6 +911,7 @@ export default function AgentWorkspace({
       await queryClient.invalidateQueries({ queryKey: ["agentic-conversations", agent] });
       await queryClient.invalidateQueries({ queryKey: ["agentic-conversation", nextId] });
       await queryClient.invalidateQueries({ queryKey: ["agentic-plans"] });
+      await queryClient.invalidateQueries({ queryKey: ["agentic-calendar"] });
       toast({ title: `${title} updated` });
     },
     onError: (error, variables) => {
