@@ -1,4 +1,6 @@
 import logging
+import re
+from collections import Counter
 from datetime import date, timedelta
 from typing import TypeVar
 
@@ -9,6 +11,16 @@ from app.core.config import get_settings
 from app.models import AgentPreferredPanel
 
 logger = logging.getLogger(__name__)
+DAY_COUNT_PATTERN = re.compile(r"\b(\d{1,3})\s*[- ]?day(?:s)?\b", re.IGNORECASE)
+DAY_SEQUENCE_PATTERN = re.compile(r"\bday\s*([1-9]\d*)\b", re.IGNORECASE)
+PLACEHOLDER_TEXT_PATTERN = re.compile(
+    r"(repeat similar|similar structure|remaining days|same as above|and so on|etc\.?|continue similarly|\.\.\.)",
+    re.IGNORECASE,
+)
+
+
+class IncompletePlanError(ValueError):
+    pass
 
 
 class MedicalStructuredResponse(BaseModel):
@@ -179,7 +191,11 @@ class AgenticLLMService:
             "When activity source provenance is available, mention whether the recommendation is based on Apple Health or Google Fitness data when useful.\n"
             "If hydration is asked about and hydration is not tracked, say that clearly before giving general guidance.\n"
             "Return a revised weekly meal plan when the user asks for planning or changes.\n"
-            "Every meal item must map to a real calendar day. Prefer monday through sunday in scheduled_day, or use Day 1, Day 2, and so on for consecutive multi-day plans.\n"
+            "If the user asks for N days, start_date and end_date must cover exactly N calendar days inclusively.\n"
+            "Every meal item must map to a real calendar day.\n"
+            "For plans longer than 7 days, every item must use scheduled_day as Day 1, Day 2, Day 3, and so on. Do not rely on weekday names alone for long plans.\n"
+            "If the user does not specify otherwise, provide breakfast, lunch, dinner, and a practical snack for each day.\n"
+            "Do not use shorthand such as 'repeat similar structure', 'same as above', 'etc.', or summaries for remaining days. Output every day explicitly.\n"
             "Keep meals practical and explain why they fit the patient's goals.\n"
             "Do not repeat the same fact across summary and highlights.\n"
             "Output structured JSON matching the schema.\n"
@@ -192,7 +208,36 @@ class AgenticLLMService:
             instructions=instructions,
             response_type=DietStructuredResponse,
         )
-        return _normalize_structured_response(DietStructuredResponse.model_validate(parsed))
+        response = _normalize_structured_response(DietStructuredResponse.model_validate(parsed))
+        feedback = _diet_response_validation_feedback(prompt, response)
+        if feedback is None:
+            return response
+
+        logger.warning("Diet plan response was incomplete; retrying with stricter guidance: %s", feedback)
+        retry_instructions = (
+            instructions
+            + "\nThe previous output was invalid for the following reasons:\n"
+            + feedback
+            + "\nReturn a complete replacement now. Every day must be explicit. Do not use placeholders or shorthand.\n"
+        )
+        retry_parsed = await self._parse(
+            user_id=user_id,
+            prompt=prompt,
+            context_messages=context_messages,
+            instructions=retry_instructions,
+            response_type=DietStructuredResponse,
+        )
+        retry_response = _normalize_structured_response(
+            DietStructuredResponse.model_validate(retry_parsed)
+        )
+        retry_feedback = _diet_response_validation_feedback(prompt, retry_response)
+        if retry_feedback is None:
+            return retry_response
+
+        logger.warning("Diet plan response remained incomplete after retry: %s", retry_feedback)
+        raise IncompletePlanError(
+            "I couldn't generate a complete day-by-day diet plan yet. Ask again and I will rebuild it without shorthand like 'repeat similar structure'."
+        )
 
     async def _parse(
         self,
@@ -336,3 +381,139 @@ def _dedupe_strings(items: list[str]) -> list[str]:
         seen.add(key)
         deduped.append(normalized)
     return deduped
+
+
+def _extract_requested_plan_days(prompt: str) -> int | None:
+    match = DAY_COUNT_PATTERN.search(prompt)
+    if match is None:
+        return None
+    requested_days = int(match.group(1))
+    return requested_days if 1 <= requested_days <= 365 else None
+
+
+def _plan_span_days(start_date: date, end_date: date) -> int:
+    return max(1, (end_date - start_date).days + 1)
+
+
+def _contains_placeholder_text(value: str | None) -> bool:
+    if not value:
+        return False
+    return PLACEHOLDER_TEXT_PATTERN.search(" ".join(value.split())) is not None
+
+
+def _weekday_to_date(label: str, *, start_date: date, span_days: int) -> date | None:
+    weekday_names = [
+        "monday",
+        "tuesday",
+        "wednesday",
+        "thursday",
+        "friday",
+        "saturday",
+        "sunday",
+    ]
+    lowered = label.strip().lower()
+    if lowered not in weekday_names:
+        return None
+    if span_days > 7:
+        return None
+    target_weekday = weekday_names.index(lowered)
+    for offset in range(span_days):
+        candidate = start_date + timedelta(days=offset)
+        if candidate.weekday() == target_weekday:
+            return candidate
+    return None
+
+
+def _resolve_diet_item_date(item: DietStructuredItem, *, start_date: date, span_days: int) -> date | None:
+    label = item.scheduled_day.strip()
+    if not label:
+        return None
+    lowered = label.lower()
+    if lowered == "today":
+        return start_date
+    if lowered == "tomorrow":
+        return start_date + timedelta(days=1)
+    if lowered == "day after tomorrow":
+        return start_date + timedelta(days=2)
+    try:
+        return date.fromisoformat(label)
+    except ValueError:
+        pass
+    match = DAY_SEQUENCE_PATTERN.search(lowered.replace("-", " "))
+    if match is not None:
+        offset = int(match.group(1)) - 1
+        if offset < 0:
+            return None
+        return start_date + timedelta(days=offset)
+    return _weekday_to_date(label, start_date=start_date, span_days=span_days)
+
+
+def _diet_response_validation_feedback(
+    prompt: str, response: DietStructuredResponse
+) -> str | None:
+    issues: list[str] = []
+    requested_days = _extract_requested_plan_days(prompt)
+    span_days = _plan_span_days(response.start_date, response.end_date)
+    if requested_days is not None and span_days != requested_days:
+        issues.append(
+            f"The plan range spans {span_days} days, but the user asked for {requested_days} days."
+        )
+
+    placeholder_count = 0
+    if _contains_placeholder_text(response.summary):
+        placeholder_count += 1
+    for item in response.items:
+        if (
+            _contains_placeholder_text(item.title)
+            or _contains_placeholder_text(item.instructions)
+            or any(_contains_placeholder_text(detail) for detail in item.details)
+            or item.meal_slot.strip().lower() == "all"
+        ):
+            placeholder_count += 1
+    if placeholder_count:
+        issues.append(
+            f"The plan contains {placeholder_count} placeholder or shorthand entries instead of explicit day-by-day meals."
+        )
+
+    counts_by_date: Counter[date] = Counter()
+    unresolved_items = 0
+    for item in response.items:
+        resolved_date = _resolve_diet_item_date(
+            item, start_date=response.start_date, span_days=span_days
+        )
+        if resolved_date is None:
+            unresolved_items += 1
+            continue
+        counts_by_date[resolved_date] += 1
+
+    if span_days > 7 and unresolved_items > 0:
+        issues.append(
+            f"{unresolved_items} meal items are missing explicit Day N or ISO date scheduling for a long plan."
+        )
+
+    non_zero_counts = [count for count in counts_by_date.values() if count > 0]
+    expected_daily_count = (
+        Counter(non_zero_counts).most_common(1)[0][0] if non_zero_counts else 0
+    )
+    minimum_daily_count = max(1, expected_daily_count - 1) if expected_daily_count else 1
+
+    missing_days = 0
+    underfilled_days = 0
+    for offset in range(span_days):
+        current_date = response.start_date + timedelta(days=offset)
+        current_count = counts_by_date.get(current_date, 0)
+        if current_count == 0:
+            missing_days += 1
+        elif current_count < minimum_daily_count:
+            underfilled_days += 1
+
+    if missing_days:
+        issues.append(
+            f"The plan leaves {missing_days} day(s) in the requested range without any meals."
+        )
+    if underfilled_days:
+        issues.append(
+            f"{underfilled_days} day(s) have too few explicit meals compared with the rest of the plan."
+        )
+
+    return " ".join(issues) if issues else None

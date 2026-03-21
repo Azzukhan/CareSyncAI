@@ -226,6 +226,7 @@ function ConversationPanels({
 }) {
   const responseData = message.responseData;
   if (!responseData) return null;
+  const totalPlanItems = responseData.plan?.items.length ?? 0;
   const visiblePanels: ChatPanelKey[] = ["summary"];
   if (agent !== "medical" && responseData.plan) {
     visiblePanels.push("plan");
@@ -315,6 +316,11 @@ function ConversationPanels({
           </div>
         ))}
       </div>
+      {totalPlanItems > 6 ? (
+        <p className="text-xs text-slate-500">
+          Showing the first 6 of {totalPlanItems} plan items. Open the calendar for the full schedule.
+        </p>
+      ) : null}
     </div>
   ) : (
     <p className="mt-4 text-sm text-slate-400">No structured plan attached to this reply.</p>
@@ -322,6 +328,11 @@ function ConversationPanels({
 
   const calendarPanel = responseData.calendar_preview.length ? (
     <div className="space-y-2">
+      {totalPlanItems > responseData.calendar_preview.length ? (
+        <p className="text-xs text-slate-500">
+          Calendar preview shows the first {responseData.calendar_preview.length} scheduled items.
+        </p>
+      ) : null}
       {responseData.calendar_preview.map((event) => {
         const detailBullets = eventDetailBullets(event.details);
         const detailMetrics = eventDetailMetrics(event);

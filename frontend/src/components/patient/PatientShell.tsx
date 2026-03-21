@@ -200,7 +200,7 @@ export default function PatientShell({
         className={cn(
           "mx-auto flex",
           workspaceMode
-            ? "h-[calc(100vh-4rem)] max-w-none gap-0 px-0 py-0"
+            ? "h-[calc(100dvh-4rem)] max-w-none gap-0 px-0 py-0"
             : "max-w-[1720px] gap-6 px-4 py-6 sm:px-6 xl:px-8",
         )}
       >
@@ -442,17 +442,23 @@ export default function PatientShell({
         <main
           className={cn(
             "relative z-10 min-w-0 flex-1",
-            workspaceMode ? "h-full overflow-hidden pb-0" : "pb-10",
+            workspaceMode ? "flex h-full min-h-0 flex-col pb-0" : "pb-10",
           )}
         >
           {!hideContentHeader ? (
-            <div className="mb-5">
+            <div className="mb-5 shrink-0">
               <p className={workspaceEyebrowClassName}>Patient Workspace</p>
               <h1 className="mt-2 text-3xl font-semibold tracking-tight">{title}</h1>
               {subtitle ? <p className="mt-2 max-w-3xl text-sm text-slate-400">{subtitle}</p> : null}
             </div>
           ) : null}
-          {children}
+          <div
+            className={cn(
+              workspaceMode ? "min-h-0 flex-1 overflow-x-hidden overflow-y-auto" : undefined,
+            )}
+          >
+            {children}
+          </div>
         </main>
       </div>
       </div>

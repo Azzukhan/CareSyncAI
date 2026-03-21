@@ -31,6 +31,7 @@ from app.models import (
 from app.modules.agentic.llm import (
     DietStructuredResponse,
     ExerciseStructuredResponse,
+    IncompletePlanError,
     agentic_llm_service,
 )
 from app.modules.health_data.service import (
@@ -1035,6 +1036,32 @@ async def query_agent_response(
             )
             response_text = result.summary
             preferred_panel = result.preferred_panel
+    except IncompletePlanError as exc:
+        pending_message.status = "failed"
+        pending_message.response_data = _build_response_data(
+            summary=str(exc),
+            highlights=[
+                "No partial plan was saved to your active calendar.",
+                "Ask again and I will regenerate the full plan day by day.",
+            ],
+            suggested_follow_ups=[
+                "Rebuild the full plan day by day",
+                "Create the full first 30 days with exact Day 1 to Day 30 scheduling",
+                "Make the 30-day plan simpler but still complete",
+            ],
+            plan=None,
+            calendar_preview=[],
+            yesterday_summary=None,
+        ).model_dump(mode="json")
+        pending_message.preferred_panel = AgentPreferredPanel.SUMMARY
+        conversation.updated_at = _utcnow()
+        await db.commit()
+        return AgentQueryResponse(
+            conversation_id=conversation.id,
+            response=str(exc),
+            preferred_panel=AgentPreferredPanel.SUMMARY,
+            data=AgentResponseData.model_validate(pending_message.response_data),
+        )
     except Exception:
         pending_message.status = "failed"
         pending_message.response_data = _build_response_data(
